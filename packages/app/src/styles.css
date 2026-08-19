@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 33% 98%;
+  --foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 215 91% 38%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 24% 92%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 24% 94%;
+  --muted-foreground: 215 16% 40%;
+  --accent: 173 58% 90%;
+  --accent-foreground: 180 45% 16%;
+  --destructive: 0 72% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 20% 83%;
+  --input: 214 20% 83%;
+  --ring: 190 82% 36%;
+  --window-group-surface: 205 80% 96%;
+  --workspace-surface: 214 26% 93%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.bg-card-surface {
+  background: color-mix(in srgb, hsl(var(--popover)) 88%, hsl(var(--muted)));
+}
+
+.bg-window-group-surface {
+  background: hsl(var(--window-group-surface));
+}
+
+.bg-workspace-surface {
+  background: hsl(var(--workspace-surface));
+}
+
+.linktag-scrollbar {
+  scrollbar-color: hsl(var(--border)) transparent;
+  scrollbar-width: thin;
+}
+
+.linktag-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.linktag-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.linktag-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.linktag-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.linktag-flow-tag {
+  -webkit-box-decoration-break: slice;
+  box-decoration-break: slice;
+}
+
+.linktag-flow-tag-arrow-end {
+  border-radius: 999px 0 0 999px;
+  margin-right: 0.55rem;
+  padding-right: 0.25rem;
+}
+
+.linktag-flow-tag-arrow-end::after {
+  background: var(--linktag-tag-color);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  content: "";
+  display: inline-block;
+  height: 1.5em;
+  margin-left: -1px;
+  margin-right: -0.55rem;
+  vertical-align: -0.36em;
+  width: 0.55rem;
+}
+
+.linktag-flow-tag-arrow-start {
+  border-radius: 0 999px 999px 0;
+  margin-left: 0.55rem;
+  padding-left: 0.25rem;
+}
+
+.linktag-flow-tag-arrow-start::before {
+  background: var(--linktag-tag-color);
+  clip-path: polygon(100% 0, 100% 100%, 0 50%);
+  content: "";
+  display: inline-block;
+  height: 1.5em;
+  margin-left: -0.55rem;
+  margin-right: -1px;
+  vertical-align: -0.36em;
+  width: 0.55rem;
+}
+
+.linktag-flow-tag-arrow-both {
+  margin-left: 0.55rem;
+  margin-right: 0.55rem;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+
+.linktag-flow-tag-arrow-both::before {
+  background: var(--linktag-tag-color);
+  clip-path: polygon(100% 0, 100% 100%, 0 50%);
+  content: "";
+  display: inline-block;
+  height: 1.5em;
+  margin-left: -0.55rem;
+  margin-right: -1px;
+  vertical-align: -0.36em;
+  width: 0.55rem;
+}
+
+.linktag-flow-tag-arrow-both::after {
+  background: var(--linktag-tag-color);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  content: "";
+  display: inline-block;
+  height: 1.5em;
+  margin-left: -1px;
+  margin-right: -0.55rem;
+  vertical-align: -0.36em;
+  width: 0.55rem;
+}
+
+.linktag-relation-name {
+  background: var(--linktag-relation-color);
+  -webkit-box-decoration-break: slice;
+  box-decoration-break: slice;
+  padding: 0 0.25rem;
+}
+
+.react-flow__node {
+  font-family: inherit;
+}
+
+.linktag-inert-handle {
+  background: transparent;
+  border: 0;
+  height: 14px;
+  min-height: 14px;
+  min-width: 14px;
+  opacity: 0;
+  width: 14px;
+}
+
+.linktag-inert-handle.connectionindicator {
+  cursor: default;
+}
+
+.react-flow__node.linktag-flow-node-active {
+  z-index: 10000 !important;
+}
+
+.react-flow__node.linktag-flow-popover-node {
+  z-index: 10000 !important;
+}
+
+.react-flow__edge-path {
+  transition:
+    stroke 120ms ease,
+    stroke-width 120ms ease;
+}
+
+.react-flow__attribution {
+  display: none;
+}

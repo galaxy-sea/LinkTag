@@ -1,0 +1,17 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "jsx": "react-jsx",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "baseUrl": ".",
+    "paths": {
+      "@linktag/app": ["../../packages/app/src/index.ts"],
+      "@linktag/app/*": ["../../packages/app/src/*"],
+      "@linktag/ui": ["../../packages/ui/src/index.tsx"]
+    }
+  },
+  "include": ["entrypoints", "src", "../../packages/app/src", "../../packages/ui/src", "wxt.config.ts"]
+}

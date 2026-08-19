@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@linktag/app": ["../../packages/app/src/index.ts"],
+      "@linktag/app/*": ["../../packages/app/src/*"],
+      "@linktag/ui": ["../../packages/ui/src/index.tsx"]
+    },
+    "types": ["node"]
+  },
+  "include": ["src", "vite.config.ts", "../../packages/app/src", "../../packages/ui/src"]
+}

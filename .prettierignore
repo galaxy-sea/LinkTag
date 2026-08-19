@@ -1,0 +1,13 @@
+node_modules
+dist
+build
+coverage
+.turbo
+.vite
+.wxt
+.output
+apps/extension/.output
+apps/extension/.wxt
+apps/web/dist
+*.log
+pnpm-lock.yaml

@@ -1,0 +1,23 @@
+{
+  "name": "linktag",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @linktag/web --filter @linktag/extension dev",
+    "dev:web": "pnpm --filter @linktag/web dev",
+    "dev:extension": "pnpm --filter @linktag/extension dev",
+    "build": "pnpm --filter @linktag/web build && pnpm --filter @linktag/extension build",
+    "build:web": "pnpm --filter @linktag/web build",
+    "build:extension": "pnpm --filter @linktag/extension build",
+    "zip:extension": "pnpm --filter @linktag/extension zip",
+    "package:extension": "pnpm --filter @linktag/extension package",
+    "typecheck": "pnpm --filter @linktag/web typecheck && pnpm --filter @linktag/extension typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "packageManager": "pnpm@10.29.2",
+  "devDependencies": {
+    "prettier": "^3.9.6"
+  }
+}
