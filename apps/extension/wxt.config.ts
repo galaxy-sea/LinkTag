@@ -3,11 +3,23 @@ import { fileURLToPath, URL } from "node:url";
 
 const appSrc = fileURLToPath(new URL("../../packages/app/src", import.meta.url));
 
+function extensionVersionParts(date = new Date()) {
+  const version = `${date.getFullYear()}.${date.getMonth() + 1}${String(date.getDate()).padStart(2, "0")}.${date.getHours()}${String(date.getMinutes()).padStart(2, "0")}`;
+  return {
+    version,
+    versionName: version,
+  };
+}
+
+const extensionVersion = extensionVersionParts();
+
 export default defineConfig({
   srcDir: ".",
   manifest: {
     name: "LinkTag",
     description: "用标签关系管理浏览器中已经打开或已经收藏的网页。",
+    version: extensionVersion.version,
+    version_name: extensionVersion.versionName,
     icons: {
       16: "icons/icon-16.png",
       32: "icons/icon-32.png",
