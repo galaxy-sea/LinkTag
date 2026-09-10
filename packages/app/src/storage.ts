@@ -165,16 +165,6 @@ export function applyWebBackupSettingsFromUrl() {
   if (token) writeSetting(provider === "github" ? "backupGithubToken" : "backupGiteeToken", token);
   if (gist)
     writeSetting(provider === "github" ? "backupGithubGist" : "backupGiteeGist", extractGistIdFromSetting(gist));
-
-  for (const name of ["type", "Token", "Gist"]) {
-    params.delete(name);
-  }
-  const nextSearch = params.toString();
-  window.history.replaceState(
-    window.history.state,
-    "",
-    `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`,
-  );
   return true;
 }
 

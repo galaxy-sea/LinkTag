@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
+    "deploy:cloudflare": "wrangler pages deploy dist --project-name linktag --branch main",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
@@ -28,6 +29,7 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.2",
-    "vite": "^7.1.4"
+    "vite": "^7.1.4",
+    "wrangler": "^4.130.0"
   }
 }

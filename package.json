@@ -7,11 +7,17 @@
     "dev": "pnpm -r --parallel --filter @linktag/web --filter @linktag/extension dev",
     "dev:web": "pnpm --filter @linktag/web dev",
     "dev:extension": "pnpm --filter @linktag/extension dev",
+
     "build": "pnpm --filter @linktag/web build && pnpm --filter @linktag/extension build",
     "build:web": "pnpm --filter @linktag/web build",
     "build:extension": "pnpm --filter @linktag/extension build",
+
+    "deploy:cloudflare": "pnpm run build:web && pnpm --filter @linktag/web deploy:cloudflare",
+
     "zip:extension": "pnpm --filter @linktag/extension zip",
+
     "package:extension": "pnpm --filter @linktag/extension package",
+
     "typecheck": "pnpm --filter @linktag/web typecheck && pnpm --filter @linktag/extension typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

@@ -410,8 +410,8 @@ export function LinkMode({
 
   const topHoverOpen = hasWindowGroups && windowGroupLayout === "top-hover" && toolbarWindowGroupsOpen;
   const showTopInline = hasWindowGroups && windowGroupLayout === "top";
-  const showRightInline = windowGroupLayout === "right";
-  const showRightHover = windowGroupLayout === "right-hover";
+  const showRightInline = hasWindowGroups && windowGroupLayout === "right";
+  const showRightHover = hasWindowGroups && windowGroupLayout === "right-hover";
 
   return (
     <div className="relative h-full overflow-hidden" data-ui-name="链接模式页面">

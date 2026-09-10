@@ -153,7 +153,7 @@ export function SettingsDialog({
       window.setTimeout(() => setWebLinkError(""), 2400);
       return;
     }
-    const url = new URL("https://tag.wcj.plus");
+    const url = new URL("https://LinkTag.wcj.plus");
     url.searchParams.set("type", backupProvider);
     url.searchParams.set("Token", currentBackupToken.trim());
     const copied = await copyText(url.toString());
