@@ -4,9 +4,15 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { cn } from "@linktag/ui";
 
 import { type AppLinkData, readLinkDataForTag } from "../../core/app-data";
-import { getElementDragPlacement, setElementDragImage } from "../../core/drag";
+import {
+  type DragPoint,
+  getDragPoint,
+  getDragPointTarget,
+  getElementDragPlacement,
+  setElementDragImage,
+} from "../../core/drag";
 import type { BadgeFilter } from "../../core/filters";
-import { moveId } from "../../core/sort";
+import { moveId, sameIds } from "../../core/sort";
 import { GroupLinkCount, GroupShell } from "./GroupShell";
 import { LinkCard } from "./LinkCard";
 import type { LinkEditValues } from "./LinkEditDialog";
@@ -45,7 +51,6 @@ function compareTagGroups(left: TagRecord, right: TagRecord, sort: TagGroupSort)
   if (sort === "updated-desc") return -updatedDiff || nameDiff;
   if (sort === "updated-asc") return updatedDiff || nameDiff;
   if (sort === "weight-desc") return -weightDiff || nameDiff;
-  if (sort === "weight-asc") return weightDiff || nameDiff;
   if (sort === "name-desc") return -nameDiff;
   return nameDiff;
 }
@@ -114,13 +119,15 @@ export function LinkMode({
   onPersistRuntimeTabLink: (tab: BrowserTab) => Promise<void>;
   onUpdateLink: (linkId: Id, values: LinkEditValues) => Promise<void>;
   onReorderTagGroups: (orderedTags: TagRecord[]) => Promise<void>;
-  onReorderLinks: (orderedLinks: LinkRecord[]) => Promise<void>;
+  onReorderLinks: (orderedLinks: LinkRecord[], tagId?: Id) => Promise<void>;
   onOpenLinks?: (links: LinkRecord[], title: string) => void;
 }) {
   const [activeBindingPopoverId, setActiveBindingPopoverId] = useState<string | null>(null);
   const [rightHoverOpen, setRightHoverOpen] = useState(false);
   const [draggedTagGroupId, setDraggedTagGroupId] = useState<Id | null>(null);
   const [previewTagGroupIds, setPreviewTagGroupIds] = useState<Id[] | null>(null);
+  const [optimisticTagGroupIds, setOptimisticTagGroupIds] = useState<Id[] | null>(null);
+  const tagGroupDragPointRef = useRef<DragPoint | null>(null);
   const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags]);
   const linksById = useMemo(() => new Map(links.map((link) => [link.id, link])), [links]);
   const relationsById = useMemo(() => new Map(relations.map((relation) => [relation.id, relation])), [relations]);
@@ -250,26 +257,59 @@ export function LinkMode({
   }, [activeRelations, badgeFilters, relationsByTagId, tagGroupSort, tags]);
 
   const tagGroupIds = useMemo(() => tagsForGroups.map((tag) => tag.id), [tagsForGroups]);
+  const effectiveTagGroupIds = useMemo(() => {
+    if (!optimisticTagGroupIds || !searchIsEmpty(searchQuery) || badgeFilters.length > 0) return tagGroupIds;
+    const knownTagIds = new Set(tagsById.keys());
+    const orderedIds = optimisticTagGroupIds.filter((tagId) => knownTagIds.has(tagId));
+    const orderedIdSet = new Set(orderedIds);
+    const remainingIds = tagGroupIds.filter((tagId) => !orderedIdSet.has(tagId));
+    return [...orderedIds, ...remainingIds];
+  }, [badgeFilters.length, optimisticTagGroupIds, searchQuery, tagGroupIds, tagsById]);
   const renderedTagsForGroups = useMemo(() => {
-    if (!previewTagGroupIds) return tagsForGroups;
-    return previewTagGroupIds.map((tagId) => tagsById.get(tagId)).filter((tag): tag is TagRecord => Boolean(tag));
-  }, [previewTagGroupIds, tagsById, tagsForGroups]);
+    const sourceIds = previewTagGroupIds ?? effectiveTagGroupIds;
+    return sourceIds.map((tagId) => tagsById.get(tagId)).filter((tag): tag is TagRecord => Boolean(tag));
+  }, [effectiveTagGroupIds, previewTagGroupIds, tagsById]);
 
   useEffect(() => {
     if (!draggedTagGroupId) setPreviewTagGroupIds(null);
   }, [draggedTagGroupId, tagGroupIds]);
+
+  useEffect(() => {
+    if (!optimisticTagGroupIds) return;
+    if (sameIds(tagGroupIds, optimisticTagGroupIds)) setOptimisticTagGroupIds(null);
+  }, [optimisticTagGroupIds, tagGroupIds]);
 
   const persistTagGroupOrder = useCallback(
     (orderedIds: Id[]) => {
       const orderedTags = orderedIds
         .map((tagId) => tagsById.get(tagId))
         .filter((tag): tag is TagRecord => Boolean(tag));
+      setOptimisticTagGroupIds(orderedTags.map((tag) => tag.id));
       onTagGroupSortChange("weight-desc");
       void onReorderTagGroups(orderedTags).catch((error: unknown) => {
         console.error("[LinkTag] 保存标签分组排序失败", error);
       });
     },
     [onReorderTagGroups, onTagGroupSortChange, tagsById],
+  );
+
+  const resolveTagGroupDropOrder = useCallback(
+    (event: ReactDragEvent<HTMLElement>) => {
+      const draggedId = draggedTagGroupId;
+      if (!draggedId) return null;
+      const point = getDragPoint(event) ?? tagGroupDragPointRef.current;
+      const target = getDragPointTarget(point, "[data-linktag-tag-group-sort-id]");
+      const targetId = target?.dataset.linktagTagGroupSortId;
+      if (!target || !targetId || targetId === draggedId) return previewTagGroupIds;
+      const sourceIds = previewTagGroupIds ?? effectiveTagGroupIds;
+      const placement = getElementDragPlacement({
+        currentTarget: target,
+        clientX: point!.clientX,
+        clientY: point!.clientY,
+      });
+      return moveId(sourceIds, draggedId, targetId, placement);
+    },
+    [draggedTagGroupId, effectiveTagGroupIds, previewTagGroupIds],
   );
 
   const relationIntersectionGroups = activeRelations.map((relation) => (
@@ -330,30 +370,38 @@ export function LinkMode({
           dragEnabled={canDragTagGroups}
           dragging={draggedTagGroupId === tag.id}
           onDragStart={(event) => {
+            tagGroupDragPointRef.current = getDragPoint(event);
             setDraggedTagGroupId(tag.id);
-            setPreviewTagGroupIds(tagGroupIds);
+            setPreviewTagGroupIds(effectiveTagGroupIds);
             setElementDragImage(event);
             event.dataTransfer.effectAllowed = "move";
             event.dataTransfer.setData("text/plain", tag.id);
           }}
-          onDragEnd={() => setDraggedTagGroupId(null)}
+          onDrag={(event) => {
+            tagGroupDragPointRef.current = getDragPoint(event) ?? tagGroupDragPointRef.current;
+          }}
+          onDragEnd={(event) => {
+            const orderedIds = resolveTagGroupDropOrder(event);
+            tagGroupDragPointRef.current = null;
+            setDraggedTagGroupId(null);
+            setPreviewTagGroupIds(null);
+            if (!draggedTagGroupId || !orderedIds || sameIds(orderedIds, effectiveTagGroupIds)) return;
+            persistTagGroupOrder(orderedIds);
+          }}
           onDragOver={(event) => {
+            tagGroupDragPointRef.current = getDragPoint(event);
             if (!draggedTagGroupId || draggedTagGroupId === tag.id) return;
             event.preventDefault();
             event.dataTransfer.dropEffect = "move";
             const placement = getElementDragPlacement(event);
             setPreviewTagGroupIds((current) => {
-              const sourceIds = current ?? tagGroupIds;
+              const sourceIds = current ?? effectiveTagGroupIds;
               const orderedIds = moveId(sourceIds, draggedTagGroupId, tag.id, placement);
               return orderedIds.every((id, index) => id === sourceIds[index]) ? current : orderedIds;
             });
           }}
           onDrop={(event) => {
             event.preventDefault();
-            if (!draggedTagGroupId) return;
-            persistTagGroupOrder(previewTagGroupIds ?? tagGroupIds);
-            setDraggedTagGroupId(null);
-            setPreviewTagGroupIds(null);
           }}
         />
       ))}
@@ -451,6 +499,7 @@ function TagLinkGroup({
   dragEnabled,
   dragging,
   onDragStart,
+  onDrag,
   onDragEnd,
   onDragOver,
   onDrop,
@@ -476,7 +525,7 @@ function TagLinkGroup({
   onBindTag: (linkId: Id, tagId: Id) => Promise<void>;
   onDeleteBinding: (linkId: Id, tagId: Id) => void;
   onUpdateLink: (linkId: Id, values: LinkEditValues) => Promise<void>;
-  onReorderLinks: (orderedLinks: LinkRecord[]) => Promise<void>;
+  onReorderLinks: (orderedLinks: LinkRecord[], tagId?: Id) => Promise<void>;
   activeBindingPopoverId: string | null;
   onOpenBindingPopover: (id: string) => void;
   onCloseBindingPopover: (id: string) => void;
@@ -484,7 +533,8 @@ function TagLinkGroup({
   dragEnabled: boolean;
   dragging: boolean;
   onDragStart: (event: ReactDragEvent<HTMLDivElement>) => void;
-  onDragEnd: () => void;
+  onDrag: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragEnd: (event: ReactDragEvent<HTMLDivElement>) => void;
   onDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
   onDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
 }) {
@@ -540,8 +590,10 @@ function TagLinkGroup({
     <div
       ref={viewportRef}
       className={cn(dragEnabled && "cursor-grab", dragging && "opacity-50")}
+      data-linktag-tag-group-sort-id={tag.id}
       draggable={dragEnabled}
       onDragStart={dragEnabled ? onDragStart : undefined}
+      onDrag={dragEnabled ? onDrag : undefined}
       onDragEnd={dragEnabled ? onDragEnd : undefined}
       onDragOver={dragEnabled ? onDragOver : undefined}
       onDrop={dragEnabled ? onDrop : undefined}
@@ -657,7 +709,7 @@ function RelationLinkGroup({
   onBindTag: (linkId: Id, tagId: Id) => Promise<void>;
   onDeleteBinding: (linkId: Id, tagId: Id) => void;
   onUpdateLink: (linkId: Id, values: LinkEditValues) => Promise<void>;
-  onReorderLinks: (orderedLinks: LinkRecord[]) => Promise<void>;
+  onReorderLinks: (orderedLinks: LinkRecord[], tagId?: Id) => Promise<void>;
   activeBindingPopoverId: string | null;
   onOpenBindingPopover: (id: string) => void;
   onCloseBindingPopover: (id: string) => void;
@@ -833,7 +885,7 @@ function LinkGroupCards({
   onBindTag: (linkId: Id, tagId: Id) => Promise<void>;
   onDeleteBinding: (linkId: Id, tagId: Id) => void;
   onUpdateLink: (linkId: Id, values: LinkEditValues) => Promise<void>;
-  onReorderLinks: (orderedLinks: LinkRecord[]) => Promise<void>;
+  onReorderLinks: (orderedLinks: LinkRecord[], tagId?: Id) => Promise<void>;
   activeBindingPopoverId: string | null;
   onOpenBindingPopover: (id: string) => void;
   onCloseBindingPopover: (id: string) => void;
@@ -843,25 +895,58 @@ function LinkGroupCards({
 }) {
   const [draggedLinkId, setDraggedLinkId] = useState<Id | null>(null);
   const [previewLinkIds, setPreviewLinkIds] = useState<Id[] | null>(null);
+  const [optimisticLinkIds, setOptimisticLinkIds] = useState<Id[] | null>(null);
+  const linkDragPointRef = useRef<DragPoint | null>(null);
   const linkIds = useMemo(() => links.map((link) => link.id), [links]);
   const linksById = useMemo(() => new Map(links.map((link) => [link.id, link])), [links]);
+  const effectiveLinkIds = useMemo(() => {
+    if (!optimisticLinkIds) return linkIds;
+    const knownLinkIds = new Set(linkIds);
+    const orderedIds = optimisticLinkIds.filter((linkId) => knownLinkIds.has(linkId));
+    const orderedIdSet = new Set(orderedIds);
+    const remainingIds = linkIds.filter((linkId) => !orderedIdSet.has(linkId));
+    return [...orderedIds, ...remainingIds];
+  }, [linkIds, optimisticLinkIds]);
   const visibleLinks = useMemo(() => {
-    if (!previewLinkIds) return links;
-    return previewLinkIds.map((linkId) => linksById.get(linkId)).filter((link): link is LinkRecord => Boolean(link));
-  }, [links, linksById, previewLinkIds]);
+    const sourceIds = previewLinkIds ?? effectiveLinkIds;
+    return sourceIds.map((linkId) => linksById.get(linkId)).filter((link): link is LinkRecord => Boolean(link));
+  }, [effectiveLinkIds, linksById, previewLinkIds]);
 
   useEffect(() => {
     if (!draggedLinkId) setPreviewLinkIds(null);
   }, [draggedLinkId, linkIds]);
 
+  useEffect(() => {
+    if (!optimisticLinkIds) return;
+    if (sameIds(linkIds, optimisticLinkIds)) setOptimisticLinkIds(null);
+  }, [linkIds, optimisticLinkIds]);
+
   const persistLinkOrder = (orderedIds: Id[]) => {
+    if (!priorityTagId) return;
     const linksById = new Map(links.map((link) => [link.id, link]));
     const orderedLinks = orderedIds
       .map((linkId) => linksById.get(linkId))
       .filter((link): link is LinkRecord => Boolean(link));
-    void onReorderLinks(orderedLinks).catch((error: unknown) => {
+    setOptimisticLinkIds(orderedLinks.map((link) => link.id));
+    void onReorderLinks(orderedLinks, priorityTagId).catch((error: unknown) => {
       console.error("[LinkTag] 保存链接排序失败", error);
     });
+  };
+
+  const resolveLinkDropOrder = (event: ReactDragEvent<HTMLElement>) => {
+    const draggedId = draggedLinkId;
+    if (!draggedId) return null;
+    const point = getDragPoint(event) ?? linkDragPointRef.current;
+    const target = getDragPointTarget(point, "[data-linktag-link-sort-id]");
+    const targetId = target?.dataset.linktagLinkSortId;
+    if (!target || !targetId || targetId === draggedId) return previewLinkIds;
+    const sourceIds = previewLinkIds ?? effectiveLinkIds;
+    const placement = getElementDragPlacement({
+      currentTarget: target,
+      clientX: point!.clientX,
+      clientY: point!.clientY,
+    });
+    return moveId(sourceIds, draggedId, targetId, placement);
   };
 
   return (
@@ -870,27 +955,39 @@ function LinkGroupCards({
         <div
           key={link.id}
           className={cn("min-w-0 cursor-grab", draggedLinkId === link.id && "opacity-50")}
+          data-linktag-link-sort-id={link.id}
           draggable
           onDragStart={(event) => {
             event.stopPropagation();
+            linkDragPointRef.current = getDragPoint(event);
             setDraggedLinkId(link.id);
-            setPreviewLinkIds(linkIds);
+            setPreviewLinkIds(effectiveLinkIds);
             setElementDragImage(event);
             event.dataTransfer.effectAllowed = "move";
             event.dataTransfer.setData("text/plain", link.id);
           }}
+          onDrag={(event) => {
+            event.stopPropagation();
+            linkDragPointRef.current = getDragPoint(event) ?? linkDragPointRef.current;
+          }}
           onDragEnd={(event) => {
             event.stopPropagation();
+            const orderedIds = resolveLinkDropOrder(event);
+            linkDragPointRef.current = null;
             setDraggedLinkId(null);
+            setPreviewLinkIds(null);
+            if (!draggedLinkId || !orderedIds || sameIds(orderedIds, effectiveLinkIds)) return;
+            persistLinkOrder(orderedIds);
           }}
           onDragOver={(event) => {
+            linkDragPointRef.current = getDragPoint(event);
             if (!draggedLinkId || draggedLinkId === link.id) return;
             event.stopPropagation();
             event.preventDefault();
             event.dataTransfer.dropEffect = "move";
             const placement = getElementDragPlacement(event);
             setPreviewLinkIds((current) => {
-              const sourceIds = current ?? linkIds;
+              const sourceIds = current ?? effectiveLinkIds;
               const orderedIds = moveId(sourceIds, draggedLinkId, link.id, placement);
               return orderedIds.every((id, index) => id === sourceIds[index]) ? current : orderedIds;
             });
@@ -898,10 +995,6 @@ function LinkGroupCards({
           onDrop={(event) => {
             event.stopPropagation();
             event.preventDefault();
-            if (!draggedLinkId) return;
-            persistLinkOrder(previewLinkIds ?? linkIds);
-            setDraggedLinkId(null);
-            setPreviewLinkIds(null);
           }}
         >
           <LinkCard

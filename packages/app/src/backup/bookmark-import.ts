@@ -76,9 +76,16 @@ function compareTags(left: TagRecord, right: TagRecord) {
   return left.name.localeCompare(right.name);
 }
 
+function compareLinkBindings(left: LinkTagRecord, right: LinkTagRecord) {
+  const sortDiff = (right.sort ?? 0) - (left.sort ?? 0);
+  if (sortDiff !== 0) return sortDiff;
+  return left.linkId.localeCompare(right.linkId);
+}
+
 function linksForTag(tagId: Id, linkTags: LinkTagRecord[], linksById: Map<Id, LinkRecord>) {
   return linkTags
     .filter((binding) => binding.tagId === tagId)
+    .sort(compareLinkBindings)
     .map((binding) => linksById.get(binding.linkId))
     .filter((link): link is LinkRecord => Boolean(link));
 }
@@ -163,6 +170,7 @@ export function parseBrowserBookmarkFile(content: string): BrowserBookmarkImport
   const document = new DOMParser().parseFromString(content, "text/html");
   const exportedAt = nowIso();
   let sortCursor = Date.now();
+  let linkTagSortCursor = Date.now();
   const linksById = new Map<Id, LinkRecord>();
   const tagsById = new Map<Id, TagRecord>();
   const linkTagsByKey = new Map<string, LinkTagRecord>();
@@ -208,7 +216,6 @@ export function parseBrowserBookmarkFile(content: string): BrowserBookmarkImport
       url,
       title: anchor.textContent?.trim() || url,
       note: "",
-      sort: sortCursor--,
     };
     if (!linksById.has(id)) linksById.set(id, link);
 
@@ -222,7 +229,9 @@ export function parseBrowserBookmarkFile(content: string): BrowserBookmarkImport
     }
     for (const tagId of tagIds) {
       const linkTagKey = `${id}:${tagId}`;
-      if (!linkTagsByKey.has(linkTagKey)) linkTagsByKey.set(linkTagKey, { collectionId, linkId: id, tagId });
+      if (!linkTagsByKey.has(linkTagKey)) {
+        linkTagsByKey.set(linkTagKey, { collectionId, linkId: id, tagId, sort: linkTagSortCursor-- });
+      }
     }
   };
 

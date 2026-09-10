@@ -270,17 +270,22 @@ export function App({
   );
 
   const reorderLinks = useCallback(
-    async (orderedLinks: LinkRecord[]) => {
+    async (orderedLinks: LinkRecord[], tagId?: Id) => {
+      if (!tagId) return;
       const sortValues = sortValuesForOrder(orderedLinks.map((link) => link.id));
-      await db.links.bulkPut(
-        orderedLinks.map((link) => ({
-          ...link,
-          sort: sortValues.get(link.id) ?? link.sort,
-        })),
-      );
+      await db.transaction("rw", db.link_tags, async () => {
+        await Promise.all(
+          orderedLinks.map((link) =>
+            db.link_tags
+              .where("[collectionId+linkId+tagId]")
+              .equals([collectionId, link.id, tagId])
+              .modify({ sort: sortValues.get(link.id) ?? 0 }),
+          ),
+        );
+      });
       await markLocalDataChanged(runtimeInfo);
     },
-    [runtimeInfo],
+    [collectionId, runtimeInfo],
   );
 
   const {

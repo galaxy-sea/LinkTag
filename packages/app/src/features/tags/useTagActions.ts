@@ -79,7 +79,7 @@ export function useTagActions({
       const missingRelations = relatedTagIds
         .filter((relatedTagId) => !findTagRelationBetween(data.relations, relatedTagId, tagId))
         .map((relatedTagId) => ({ sourceTagId: tagId, targetTagId: relatedTagId }));
-      await db.link_tags.add({ collectionId, linkId, tagId });
+      await db.link_tags.add({ collectionId, linkId, tagId, sort: Date.now() });
       await markCurrentLocalDataChanged();
       if (missingRelations.length) {
         setPendingRelations((current) => {
@@ -109,7 +109,6 @@ export function useTagActions({
         url: tab.url,
         title: tab.title,
         note: existing?.note ?? "",
-        sort: existing?.sort ?? Date.now(),
       });
       await markCurrentLocalDataChanged();
     },
@@ -118,14 +117,12 @@ export function useTagActions({
 
   const updateLink = useCallback(
     async (linkId: Id, values: Pick<LinkRecord, "title" | "url" | "note">) => {
-      const existing = await db.links.where("[collectionId+id]").equals([collectionId, linkId]).first();
       await db.links.put({
         id: linkId,
         collectionId,
         title: values.title.trim(),
         url: values.url.trim(),
         note: values.note,
-        sort: existing?.sort ?? Date.now(),
       });
       await markCurrentLocalDataChanged();
     },

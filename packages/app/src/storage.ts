@@ -216,7 +216,6 @@ export function readSettings() {
       "updated-desc",
       "updated-asc",
       "weight-desc",
-      "weight-asc",
       "name-asc",
       "name-desc",
     ]),

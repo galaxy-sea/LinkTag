@@ -32,7 +32,7 @@ export class LinkTagDb extends Dexie {
     // Dexie stores() declares primary keys and indexes only. Non-indexed record fields are still persisted.
     this.version(1).stores({
       collections: "id, name, updatedAt, sort",
-      links: "[collectionId+id], collectionId, id, [collectionId+url], [collectionId+sort], url, title, sort",
+      links: "[collectionId+id], collectionId, id, [collectionId+url], url, title",
       tags: "[collectionId+id], collectionId, id, [collectionId+name], [collectionId+updatedAt], [collectionId+sort], name, color, updatedAt, sort",
       link_tags:
         "[collectionId+linkId+tagId], collectionId, [collectionId+linkId], [collectionId+tagId], linkId, tagId",

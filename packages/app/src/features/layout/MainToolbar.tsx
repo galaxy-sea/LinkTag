@@ -203,8 +203,7 @@ export function MainToolbar({
           >
             <SelectItem value="updated-desc">最近倒序</SelectItem>
             <SelectItem value="updated-asc">最近正序</SelectItem>
-            <SelectItem value="weight-desc">权重倒序</SelectItem>
-            <SelectItem value="weight-asc">权重正序</SelectItem>
+            <SelectItem value="weight-desc">权重排序</SelectItem>
             <SelectItem value="name-asc">名称正序</SelectItem>
             <SelectItem value="name-desc">名称倒序</SelectItem>
           </SelectContent>

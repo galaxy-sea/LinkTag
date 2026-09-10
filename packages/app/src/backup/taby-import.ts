@@ -87,6 +87,7 @@ export function parseTabyJsonFile(content: string): BackupData {
 
   const importedAt = nowIso();
   let sortCursor = Date.now();
+  let linkTagSortCursor = Date.now();
   const collectionsById = new Map<Id, CollectionRecord>();
   const linksByKey = new Map<string, LinkRecord>();
   const tagsByKey = new Map<string, TagRecord>();
@@ -125,7 +126,9 @@ export function parseTabyJsonFile(content: string): BackupData {
 
   const addLinkTag = (collectionId: Id, linkId: Id, tagId: Id) => {
     const key = `${collectionId}:${linkId}:${tagId}`;
-    if (!linkTagsByKey.has(key)) linkTagsByKey.set(key, { collectionId, linkId, tagId });
+    if (!linkTagsByKey.has(key)) {
+      linkTagsByKey.set(key, { collectionId, linkId, tagId, sort: linkTagSortCursor-- });
+    }
   };
 
   const addTagRelation = (collectionId: Id, sourceTagId: Id | null, targetTagId: Id | null) => {
@@ -177,7 +180,6 @@ export function parseTabyJsonFile(content: string): BackupData {
           url,
           title: textValue(cardValue.title) || url,
           note: textValue(cardValue.description),
-          sort: sortCursor--,
         };
         const linkKey = `${collection.id}:${id}`;
         if (!linksByKey.has(linkKey)) linksByKey.set(linkKey, link);

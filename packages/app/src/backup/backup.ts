@@ -100,8 +100,8 @@ export type BackupPreflightResult =
   | { type: "missing-gist"; gist: string; url: string }
   | { type: "conflict"; conflict: NonNullable<BackupConflict> };
 
-export function stripLinkFavicon(link: LinkRecord & { favicon?: unknown }): LinkRecord {
-  const { favicon: _favicon, ...nextLink } = link;
+export function stripLinkFavicon(link: LinkRecord & { favicon?: unknown; sort?: unknown }): LinkRecord {
+  const { favicon: _favicon, sort: _sort, ...nextLink } = link;
   return nextLink;
 }
 
@@ -111,15 +111,13 @@ export function sanitizeBackupData(data: BackupData): BackupData {
       ...collection,
       sort: collection.sort ?? data.collections.length - index,
     })),
-    links: data.links.map((link, index) => ({
-      ...stripLinkFavicon(link),
-      sort: link.sort ?? data.links.length - index,
-    })),
+    links: data.links.map(stripLinkFavicon),
     tags: data.tags.map((tag, index) => ({ ...tag, sort: tag.sort ?? data.tags.length - index })),
-    link_tags: data.link_tags.map((binding) => ({
+    link_tags: data.link_tags.map((binding, index) => ({
       collectionId: binding.collectionId,
       linkId: binding.linkId,
       tagId: binding.tagId,
+      sort: binding.sort ?? data.link_tags.length - index,
     })),
     tag_relations: data.tag_relations.map((relation) => ({
       ...relation,

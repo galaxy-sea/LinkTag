@@ -39,9 +39,13 @@ function compareTags(left: TagRecord, right: TagRecord) {
 }
 
 function compareLinks(left: LinkRecord, right: LinkRecord) {
+  return left.title.localeCompare(right.title) || left.url.localeCompare(right.url);
+}
+
+function compareLinkBindings(left: LinkTagRecord, right: LinkTagRecord) {
   const sortDiff = (right.sort ?? 0) - (left.sort ?? 0);
   if (sortDiff !== 0) return sortDiff;
-  return left.title.localeCompare(right.title);
+  return left.linkId.localeCompare(right.linkId);
 }
 
 export async function readAppData(collectionId = getActiveCollectionId()): Promise<AppData> {
@@ -69,7 +73,7 @@ export async function readBackupData(): Promise<BackupSourceData> {
     }),
     links: links.map(stripLinkFavicon).sort(compareLinks),
     tags,
-    linkTags,
+    linkTags: [...linkTags].sort(compareLinkBindings),
     relations,
     metadata: metadata ?? null,
   };
@@ -124,9 +128,18 @@ export async function readLinkDataForLinkIds(
 }
 
 export async function readLinkDataForTag(tagId: Id, collectionId = getActiveCollectionId()): Promise<AppLinkData> {
-  const tagLinkRows = await db.link_tags.where("[collectionId+tagId]").equals([collectionId, tagId]).toArray();
+  const tagLinkRows = (
+    await db.link_tags.where("[collectionId+tagId]").equals([collectionId, tagId]).toArray()
+  ).sort(compareLinkBindings);
   const linkIds = tagLinkRows.map((row) => row.linkId);
-  return readLinkDataForLinkIds(linkIds, collectionId);
+  const linkData = await readLinkDataForLinkIds(linkIds, collectionId);
+  const linkOrder = new Map(tagLinkRows.map((row, index) => [row.linkId, index]));
+  return {
+    links: [...linkData.links].sort(
+      (left, right) => (linkOrder.get(left.id) ?? 0) - (linkOrder.get(right.id) ?? 0) || compareLinks(left, right),
+    ),
+    linkTags: linkData.linkTags,
+  };
 }
 
 function countLinksByTagId(tags: TagRecord[], linkTags: LinkTagRecord[]) {

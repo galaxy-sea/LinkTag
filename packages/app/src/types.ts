@@ -13,7 +13,6 @@ export interface LinkRecord {
   url: string;
   title: string;
   note?: string;
-  sort?: number;
 }
 
 export interface TagRecord {
@@ -30,6 +29,7 @@ export interface LinkTagRecord {
   collectionId: Id;
   linkId: Id;
   tagId: Id;
+  sort?: number;
 }
 
 export interface TagRelationRecord {
@@ -90,7 +90,7 @@ export interface GraphWindowRect {
 export type MainMode = "links" | "graph";
 export type LinkView = "card" | "compact" | "list" | "grid";
 export type WindowGroupLayout = "top" | "top-hover" | "right" | "right-hover";
-export type TagGroupSort = "updated-desc" | "updated-asc" | "weight-desc" | "weight-asc" | "name-asc" | "name-desc";
+export type TagGroupSort = "updated-desc" | "updated-asc" | "weight-desc" | "name-asc" | "name-desc";
 export type GroupOpenMode = "tab-group" | "tabs";
 export type TagDisplayFormat = "tag" | "relation" | "tag-relation" | "relation-tag";
 export type ElkLayout = "horizontal" | "vertical" | "force" | "stress";

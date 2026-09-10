@@ -12,3 +12,19 @@ export function getElementDragPlacement(event: { currentTarget: HTMLElement; cli
     columnCount > 1 ? event.clientX > rect.left + rect.width / 2 : event.clientY > rect.top + rect.height / 2;
   return after ? "after" : "before";
 }
+
+export type DragPoint = {
+  clientX: number;
+  clientY: number;
+};
+
+export function getDragPoint(event: { clientX: number; clientY: number }): DragPoint | null {
+  if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return null;
+  if (event.clientX === 0 && event.clientY === 0) return null;
+  return { clientX: event.clientX, clientY: event.clientY };
+}
+
+export function getDragPointTarget(point: DragPoint | null, selector: string) {
+  if (!point) return null;
+  return document.elementFromPoint(point.clientX, point.clientY)?.closest(selector) as HTMLElement | null;
+}

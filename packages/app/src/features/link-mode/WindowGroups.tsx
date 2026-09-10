@@ -1,11 +1,17 @@
-import { type DragEvent as ReactDragEvent, useState } from "react";
+import { type DragEvent as ReactDragEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@linktag/ui";
 
-import { getElementDragPlacement, setElementDragImage } from "../../core/drag";
+import {
+  type DragPoint,
+  getDragPoint,
+  getDragPointTarget,
+  getElementDragPlacement,
+  setElementDragImage,
+} from "../../core/drag";
 import { linkGroupLayoutClassName } from "../../core/link-mode-utils";
 import { searchIsEmpty, searchMatchesTab, type ParsedSearchQuery } from "../../core/search";
-import { moveId } from "../../core/sort";
+import { moveId, sameIds } from "../../core/sort";
 import { GroupLinkCount, GroupShell } from "./GroupShell";
 import { LinkCard } from "./LinkCard";
 import type { LinkEditValues } from "./LinkEditDialog";
@@ -55,7 +61,7 @@ export function WindowGroups({
   onDeleteBinding: (linkId: Id, tagId: Id) => void;
   onPersistRuntimeTabLink: (tab: BrowserTab) => Promise<void>;
   onUpdateLink: (linkId: Id, values: LinkEditValues) => Promise<void>;
-  onReorderLinks: (orderedLinks: LinkRecord[]) => Promise<void>;
+  onReorderLinks: (orderedLinks: LinkRecord[], tagId?: Id) => Promise<void>;
   onOpenLinks?: (links: LinkRecord[], title: string) => void;
   activeBindingPopoverId: string | null;
   onOpenBindingPopover: (id: string) => void;
@@ -64,12 +70,46 @@ export function WindowGroups({
   edgeToEdge?: boolean;
   showEmptyGroups?: boolean;
 }) {
+  const canReorderWindowLinks = false;
   const [linkDragState, setLinkDragState] = useState<{ groupKey: string; linkId: Id; orderedIds: Id[] } | null>(null);
-  const persistLinkOrder = (links: LinkRecord[], orderedIds: Id[]) => {
+  const [optimisticLinkOrders, setOptimisticLinkOrders] = useState<Record<string, Id[]>>({});
+  const linkDragPointRef = useRef<DragPoint | null>(null);
+  const currentWindowLinkOrders = useMemo(
+    () =>
+      windows.map((window) => {
+        const groupKey = `window:${window.id}`;
+        const visibleLinks = window.tabs
+          .map((tab, index) => ({ link: tabToLinkRecord(tab, linksById, collectionId), index }))
+          .sort((left, right) => left.index - right.index);
+        return { groupKey, orderedIds: visibleLinks.map((item) => item.link.id) };
+      }),
+    [collectionId, linksById, windows],
+  );
+
+  useEffect(() => {
+    setOptimisticLinkOrders((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const { groupKey, orderedIds } of currentWindowLinkOrders) {
+        if (next[groupKey] && sameIds(next[groupKey], orderedIds)) {
+          delete next[groupKey];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [currentWindowLinkOrders]);
+
+  useEffect(() => {
+    setOptimisticLinkOrders({});
+  }, [collectionId]);
+
+  const persistLinkOrder = (groupKey: string, links: LinkRecord[], orderedIds: Id[]) => {
     const linksById = new Map(links.map((link) => [link.id, link]));
     const orderedLinks = orderedIds
       .map((linkId) => linksById.get(linkId))
       .filter((link): link is LinkRecord => Boolean(link));
+    setOptimisticLinkOrders((current) => ({ ...current, [groupKey]: orderedLinks.map((link) => link.id) }));
     void onReorderLinks(orderedLinks).catch((error: unknown) => {
       console.error("[LinkTag] 保存窗口链接排序失败", error);
     });
@@ -95,19 +135,24 @@ export function WindowGroups({
         const groupKey = `window:${window.id}`;
         const visibleLinks = visibleTabs
           .map((tab, index) => ({ tab, link: tabToLinkRecord(tab, linksById, collectionId), index }))
-          .sort((left, right) => {
-            const sortDiff = (right.link.sort ?? 0) - (left.link.sort ?? 0);
-            if (sortDiff !== 0) return sortDiff;
-            return left.index - right.index;
-          });
+          .sort((left, right) => left.index - right.index);
         const groupLinks = visibleLinks.map((item) => item.link);
         const visibleLinksByLinkId = new Map(visibleLinks.map((item) => [item.link.id, item]));
+        const optimisticLinkIds = optimisticLinkOrders[groupKey] ?? null;
+        const effectiveLinkIds = optimisticLinkIds
+          ? [
+              ...optimisticLinkIds.filter((linkId) => visibleLinksByLinkId.has(linkId)),
+              ...groupLinks.map((link) => link.id).filter((linkId) => !optimisticLinkIds.includes(linkId)),
+            ]
+          : groupLinks.map((link) => link.id);
         const renderedLinks =
           linkDragState?.groupKey === groupKey
             ? linkDragState.orderedIds
                 .map((linkId) => visibleLinksByLinkId.get(linkId))
                 .filter((item): item is (typeof visibleLinks)[number] => Boolean(item))
-            : visibleLinks;
+            : effectiveLinkIds
+                .map((linkId) => visibleLinksByLinkId.get(linkId))
+                .filter((item): item is (typeof visibleLinks)[number] => Boolean(item));
         const isCollapsed =
           visibleTabs.length > 0 && (!filterQuery || searchIsEmpty(searchQuery)) && collapsed[groupKey];
         return (
@@ -137,6 +182,7 @@ export function WindowGroups({
               ) : null}
               {renderedLinks.map(({ tab, link: cardLink }) => {
                 const handleDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+                  linkDragPointRef.current = getDragPoint(event);
                   if (!linkDragState || linkDragState.groupKey !== groupKey || linkDragState.linkId === cardLink.id)
                     return;
                   event.stopPropagation();
@@ -154,31 +200,85 @@ export function WindowGroups({
                 return (
                   <div
                     key={tab.id}
-                    className={cn("min-w-0 cursor-grab", linkDragState?.linkId === cardLink.id && "opacity-50")}
-                    draggable
-                    onDragStart={(event) => {
-                      event.stopPropagation();
-                      setLinkDragState({
-                        groupKey,
-                        linkId: cardLink.id,
-                        orderedIds: groupLinks.map((link) => link.id),
-                      });
-                      setElementDragImage(event);
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("text/plain", cardLink.id);
-                    }}
-                    onDragEnd={(event) => {
-                      event.stopPropagation();
-                      setLinkDragState(null);
-                    }}
-                    onDragOver={handleDragOver}
-                    onDrop={(event) => {
-                      event.stopPropagation();
-                      event.preventDefault();
-                      if (!linkDragState || linkDragState.groupKey !== groupKey) return;
-                      persistLinkOrder(groupLinks, linkDragState.orderedIds);
-                      setLinkDragState(null);
-                    }}
+                    className={cn(
+                      "min-w-0",
+                      canReorderWindowLinks && "cursor-grab",
+                      linkDragState?.linkId === cardLink.id && "opacity-50",
+                    )}
+                    data-linktag-window-link-group={groupKey}
+                    data-linktag-window-link-sort-id={cardLink.id}
+                    draggable={canReorderWindowLinks}
+                    onDragStart={
+                      canReorderWindowLinks
+                        ? (event) => {
+                            event.stopPropagation();
+                            linkDragPointRef.current = getDragPoint(event);
+                            setLinkDragState({
+                              groupKey,
+                              linkId: cardLink.id,
+                              orderedIds: effectiveLinkIds,
+                            });
+                            setElementDragImage(event);
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", cardLink.id);
+                          }
+                        : undefined
+                    }
+                    onDrag={
+                      canReorderWindowLinks
+                        ? (event) => {
+                            event.stopPropagation();
+                            linkDragPointRef.current = getDragPoint(event) ?? linkDragPointRef.current;
+                          }
+                        : undefined
+                    }
+                    onDragEnd={
+                      canReorderWindowLinks
+                        ? (event) => {
+                            event.stopPropagation();
+                            const point = getDragPoint(event) ?? linkDragPointRef.current;
+                            const target = getDragPointTarget(point, "[data-linktag-window-link-sort-id]");
+                            const targetId = target?.dataset.linktagWindowLinkSortId;
+                            const targetGroupKey = target?.dataset.linktagWindowLinkGroup;
+                            const sourceIds = linkDragState?.orderedIds ?? effectiveLinkIds;
+                            const resolvedIds =
+                              linkDragState &&
+                              target &&
+                              targetId &&
+                              targetGroupKey === groupKey &&
+                              targetId !== linkDragState.linkId
+                                ? moveId(
+                                    sourceIds,
+                                    linkDragState.linkId,
+                                    targetId,
+                                    getElementDragPlacement({
+                                      currentTarget: target,
+                                      clientX: point!.clientX,
+                                      clientY: point!.clientY,
+                                    }),
+                                  )
+                                : linkDragState?.orderedIds;
+                            const orderedIds =
+                              linkDragState?.groupKey === groupKey &&
+                              resolvedIds &&
+                              !sameIds(resolvedIds, effectiveLinkIds)
+                                ? resolvedIds
+                                : null;
+                            linkDragPointRef.current = null;
+                            setLinkDragState(null);
+                            if (orderedIds) persistLinkOrder(groupKey, groupLinks, orderedIds);
+                          }
+                        : undefined
+                    }
+                    onDragOver={canReorderWindowLinks ? handleDragOver : undefined}
+                    onDrop={
+                      canReorderWindowLinks
+                        ? (event) => {
+                            event.stopPropagation();
+                            event.preventDefault();
+                          }
+                        : undefined
+                    }
                   >
                     <LinkCard
                       view={side ? "list" : linkView === "grid" ? "card" : linkView}

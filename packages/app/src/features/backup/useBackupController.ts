@@ -117,6 +117,7 @@ function sanitizeCollectionImportData(data: BrowserBookmarkImportData, collectio
       collectionId,
       linkId: binding.linkId,
       tagId: binding.tagId,
+      sort: binding.sort,
     })),
     tag_relations: data.tag_relations.map((relation) => ({ ...relation, collectionId })),
   };

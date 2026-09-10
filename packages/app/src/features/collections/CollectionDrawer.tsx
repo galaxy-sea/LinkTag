@@ -1,6 +1,14 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { PanelLeftClose, PanelLeftOpen, Plus } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  type DragEvent as ReactDragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   AlertDialog,
@@ -31,8 +39,14 @@ import {
   readCollections,
   setActiveCollectionId,
 } from "../../db";
-import { getElementDragPlacement, setElementDragImage } from "../../core/drag";
-import { moveId, sortValuesForOrder } from "../../core/sort";
+import {
+  type DragPoint,
+  getDragPoint,
+  getDragPointTarget,
+  getElementDragPlacement,
+  setElementDragImage,
+} from "../../core/drag";
+import { moveId, sameIds, sortValuesForOrder } from "../../core/sort";
 import type { CollectionRecord, Id } from "../../types";
 
 const fallbackCollection: CollectionRecord = {
@@ -75,23 +89,38 @@ export function CollectionDrawer({
   const [collectionMenuOpen, setCollectionMenuOpen] = useState(false);
   const [draggedCollectionId, setDraggedCollectionId] = useState<Id | null>(null);
   const [previewCollectionIds, setPreviewCollectionIds] = useState<Id[] | null>(null);
+  const [optimisticCollectionIds, setOptimisticCollectionIds] = useState<Id[] | null>(null);
+  const dragPointRef = useRef<DragPoint | null>(null);
   const collectionIds = useMemo(() => collections.map((collection) => collection.id), [collections]);
   const collectionsById = useMemo(
     () => new Map(collections.map((collection) => [collection.id, collection])),
     [collections],
   );
+  const effectiveCollectionIds = useMemo(() => {
+    if (!optimisticCollectionIds) return collectionIds;
+    const knownIds = new Set(collectionIds);
+    const orderedIds = optimisticCollectionIds.filter((collectionId) => knownIds.has(collectionId));
+    const orderedIdSet = new Set(orderedIds);
+    const remainingIds = collectionIds.filter((collectionId) => !orderedIdSet.has(collectionId));
+    return [...orderedIds, ...remainingIds];
+  }, [collectionIds, optimisticCollectionIds]);
   const visibleCollections = useMemo(() => {
-    if (!previewCollectionIds) return collections;
-    return previewCollectionIds
+    const sourceIds = previewCollectionIds ?? effectiveCollectionIds;
+    return sourceIds
       .map((collectionId) => collectionsById.get(collectionId))
       .filter((collection): collection is CollectionRecord => Boolean(collection));
-  }, [collections, collectionsById, previewCollectionIds]);
+  }, [collectionsById, effectiveCollectionIds, previewCollectionIds]);
   const expanded = pinnedOpen || hoverOpen || collectionMenuOpen || Boolean(draggedCollectionId);
   const canDeleteCollection = collections.length > 1;
 
   useEffect(() => {
     if (!draggedCollectionId) setPreviewCollectionIds(null);
   }, [draggedCollectionId, collectionIds]);
+
+  useEffect(() => {
+    if (!optimisticCollectionIds) return;
+    if (sameIds(collectionIds, optimisticCollectionIds)) setOptimisticCollectionIds(null);
+  }, [collectionIds, optimisticCollectionIds]);
 
   const releaseTransientOpen = () => {
     setHoverOpen(false);
@@ -111,6 +140,7 @@ export function CollectionDrawer({
   };
 
   const persistCollectionOrder = async (orderedIds: Id[]) => {
+    setOptimisticCollectionIds(orderedIds);
     const sortValues = sortValuesForOrder(orderedIds);
     await db.collections.bulkPut(
       collections.map((collection) => ({
@@ -119,6 +149,22 @@ export function CollectionDrawer({
       })),
     );
     await onCollectionChange?.();
+  };
+
+  const resolveCollectionDropOrder = (event: ReactDragEvent<HTMLElement>) => {
+    const draggedId = draggedCollectionId;
+    if (!draggedId) return null;
+    const point = getDragPoint(event) ?? dragPointRef.current;
+    const target = getDragPointTarget(point, "[data-linktag-collection-sort-id]");
+    const targetId = target?.dataset.linktagCollectionSortId;
+    if (!target || !targetId || targetId === draggedId) return previewCollectionIds;
+    const sourceIds = previewCollectionIds ?? effectiveCollectionIds;
+    const placement = getElementDragPlacement({
+      currentTarget: target,
+      clientX: point!.clientX,
+      clientY: point!.clientY,
+    });
+    return moveId(sourceIds, draggedId, targetId, placement);
   };
 
   const saveCollection = async () => {
@@ -278,6 +324,7 @@ export function CollectionDrawer({
                     )}
                     data-ui-name="集合选项"
                     data-linktag-context-menu
+                    data-linktag-collection-sort-id={collection.id}
                     draggable
                     size="sm"
                     variant={active ? "default" : "ghost"}
@@ -285,30 +332,38 @@ export function CollectionDrawer({
                     aria-label={collection.name}
                     onClick={() => selectCollection(collection.id)}
                     onDragStart={(event) => {
+                      dragPointRef.current = getDragPoint(event);
                       setDraggedCollectionId(collection.id);
-                      setPreviewCollectionIds(collectionIds);
+                      setPreviewCollectionIds(effectiveCollectionIds);
                       setElementDragImage(event);
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData("text/plain", collection.id);
                     }}
-                    onDragEnd={() => setDraggedCollectionId(null)}
+                    onDrag={(event) => {
+                      dragPointRef.current = getDragPoint(event) ?? dragPointRef.current;
+                    }}
+                    onDragEnd={(event) => {
+                      const orderedIds = resolveCollectionDropOrder(event);
+                      dragPointRef.current = null;
+                      setDraggedCollectionId(null);
+                      setPreviewCollectionIds(null);
+                      if (!draggedCollectionId || !orderedIds || sameIds(orderedIds, effectiveCollectionIds)) return;
+                      void persistCollectionOrder(orderedIds);
+                    }}
                     onDragOver={(event) => {
+                      dragPointRef.current = getDragPoint(event);
                       if (!draggedCollectionId || draggedCollectionId === collection.id) return;
                       event.preventDefault();
                       event.dataTransfer.dropEffect = "move";
                       const placement = getElementDragPlacement(event);
                       setPreviewCollectionIds((current) => {
-                        const sourceIds = current ?? collectionIds;
+                        const sourceIds = current ?? effectiveCollectionIds;
                         const orderedIds = moveId(sourceIds, draggedCollectionId, collection.id, placement);
                         return orderedIds.every((id, index) => id === sourceIds[index]) ? current : orderedIds;
                       });
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
-                      if (!draggedCollectionId) return;
-                      void persistCollectionOrder(previewCollectionIds ?? collectionIds);
-                      setDraggedCollectionId(null);
-                      setPreviewCollectionIds(null);
                     }}
                   >
                     <span

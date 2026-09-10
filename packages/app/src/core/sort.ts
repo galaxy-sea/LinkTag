@@ -24,3 +24,7 @@ export function sortValuesForOrder(ids: Id[]) {
   const base = Date.now();
   return new Map(ids.map((id, index) => [id, base + ids.length - index]));
 }
+
+export function sameIds(left: Id[], right: Id[]) {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}

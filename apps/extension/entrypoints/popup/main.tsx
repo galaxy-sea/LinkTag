@@ -104,7 +104,6 @@ function Popup() {
             url: existingLink?.url ?? page.url,
             title: existingLink?.title ?? (page.title || page.url),
             note: existingLink?.note ?? "",
-            sort: existingLink?.sort ?? Date.now(),
           }
         : null,
     [collectionId, currentLinkId, existingLink, page],

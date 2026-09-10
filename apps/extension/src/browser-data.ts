@@ -292,6 +292,7 @@ export async function readBrowserBookmarkData(): Promise<BrowserBookmarkImportDa
   const collectionId = getActiveCollectionId();
   const exportedAt = nowIso();
   let sortCursor = Date.now();
+  let linkTagSortCursor = Date.now();
   const linksById = new Map<Id, LinkRecord>();
   const tagsById = new Map<Id, TagRecord>();
   const linkTagsByKey = new Map<string, LinkTagRecord>();
@@ -337,7 +338,6 @@ export async function readBrowserBookmarkData(): Promise<BrowserBookmarkImportDa
         url: node.url,
         title: node.title || node.url,
         note: "",
-        sort: sortCursor--,
       });
     }
 
@@ -351,7 +351,9 @@ export async function readBrowserBookmarkData(): Promise<BrowserBookmarkImportDa
     }
     for (const tagId of tagIds) {
       const key = `${id}:${tagId}`;
-      if (!linkTagsByKey.has(key)) linkTagsByKey.set(key, { collectionId, linkId: id, tagId });
+      if (!linkTagsByKey.has(key)) {
+        linkTagsByKey.set(key, { collectionId, linkId: id, tagId, sort: linkTagSortCursor-- });
+      }
     }
   };
 
