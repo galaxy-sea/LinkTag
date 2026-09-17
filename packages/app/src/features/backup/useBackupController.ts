@@ -40,7 +40,7 @@ import {
   type BrowserBookmarkImportData,
 } from "../../backup/bookmark-import";
 import { parseTabyJsonFile } from "../../backup/taby-import";
-import { type AppData, readAppData, readBackupData } from "../../core/app-data";
+import { type AppData, readBackupData } from "../../core/app-data";
 import {
   db,
   DEFAULT_COLLECTION_ID,
@@ -324,8 +324,9 @@ export function useBackupController({
     setBackupStatus({ type: "running", message: "正在导出浏览器书签..." });
     try {
       const exportedAt = nowIso();
-      const snapshot = await readAppData();
+      const snapshot = await readBackupData();
       const content = createBrowserBookmarkHtml({
+        collections: snapshot.collections,
         links: snapshot.links,
         tags: snapshot.tags,
         linkTags: snapshot.linkTags,
@@ -338,9 +339,10 @@ export function useBackupController({
   };
 
   const runLocalBookmarkBackup = useCallback(
-    async (snapshot: AppData) => {
+    async (snapshot: BackupSourceData) => {
       if (!writeBrowserBookmarkBackup) return false;
       await writeBrowserBookmarkBackup({
+        collections: snapshot.collections,
         links: snapshot.links,
         tags: snapshot.tags,
         linkTags: snapshot.linkTags,
@@ -660,11 +662,11 @@ export function useBackupController({
       }
 
       if (latestSettings.localBookmarkBackupEnabled && writeBrowserBookmarkBackup) {
-        const bookmarkSnapshot = await readAppData();
-        await runLocalBookmarkBackup(bookmarkSnapshot);
+        await runLocalBookmarkBackup(snapshot);
         debugSyncLog("主配置同步后：本地书签同步完成", {
-          链接数量: bookmarkSnapshot.links.length,
-          标签数量: bookmarkSnapshot.tags.length,
+          集合数量: snapshot.collections.length,
+          链接数量: snapshot.links.length,
+          标签数量: snapshot.tags.length,
         });
       }
     },
@@ -700,11 +702,11 @@ export function useBackupController({
       });
       if (!canRunRemoteBackup) {
         if (shouldRunLocalBookmarkBackup) {
-          const bookmarkSnapshot = await readAppData();
-          await runLocalBookmarkBackup(bookmarkSnapshot);
+          await runLocalBookmarkBackup(snapshot);
           debugSyncLog("立即同步：本地书签同步完成", {
-            链接数量: bookmarkSnapshot.links.length,
-            标签数量: bookmarkSnapshot.tags.length,
+            集合数量: snapshot.collections.length,
+            链接数量: snapshot.links.length,
+            标签数量: snapshot.tags.length,
           });
         }
         autoBackupLastSignatureRef.current = createBackupDataSignature(snapshot);
@@ -913,11 +915,11 @@ export function useBackupController({
 
           if (!canRunRemoteBackup) {
             if (shouldRunLocalBookmarkBackup) {
-              const bookmarkSnapshot = await readAppData();
-              await runLocalBookmarkBackup(bookmarkSnapshot);
+              await runLocalBookmarkBackup(latestSnapshot);
               debugSyncLog("自动同步：本地书签同步完成", {
-                链接数量: bookmarkSnapshot.links.length,
-                标签数量: bookmarkSnapshot.tags.length,
+                集合数量: latestSnapshot.collections.length,
+                链接数量: latestSnapshot.links.length,
+                标签数量: latestSnapshot.tags.length,
               });
             }
             autoBackupLastSignatureRef.current = latestSignature;

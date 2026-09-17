@@ -83,6 +83,7 @@ export function LinkMode({
   onBindTag,
   onDeleteBinding,
   onEditTag,
+  onDeleteRelation,
   onPersistRuntimeTabLink,
   onUpdateLink,
   onReorderTagGroups,
@@ -116,6 +117,7 @@ export function LinkMode({
   onBindTag: (linkId: Id, tagId: Id) => Promise<void>;
   onDeleteBinding: (linkId: Id, tagId: Id) => void;
   onEditTag: (tag: TagRecord) => void;
+  onDeleteRelation: (relationId: Id) => void;
   onPersistRuntimeTabLink: (tab: BrowserTab) => Promise<void>;
   onUpdateLink: (linkId: Id, values: LinkEditValues) => Promise<void>;
   onReorderTagGroups: (orderedTags: TagRecord[]) => Promise<void>;
@@ -324,6 +326,7 @@ export function LinkMode({
       selectedTagIds={selectedTagIds}
       onBadgeFilterChange={onBadgeFilterChange}
       onEditTag={onEditTag}
+      onDeleteRelation={onDeleteRelation}
       onCreateTag={onCreateTag}
       onBindTag={onBindTag}
       onDeleteBinding={onDeleteBinding}
@@ -357,6 +360,7 @@ export function LinkMode({
           totalLinkCount={tagLinkCountsByTagId.get(tag.id) ?? 0}
           onBadgeFilterChange={onBadgeFilterChange}
           onEditTag={onEditTag}
+          onDeleteRelation={onDeleteRelation}
           onToggle={() => onToggleTagGroup(tag.id)}
           onCreateTag={onCreateTag}
           onBindTag={onBindTag}
@@ -486,6 +490,7 @@ function TagLinkGroup({
   totalLinkCount,
   onBadgeFilterChange,
   onEditTag,
+  onDeleteRelation,
   onToggle,
   onCreateTag,
   onBindTag,
@@ -520,6 +525,7 @@ function TagLinkGroup({
   totalLinkCount: number | null;
   onBadgeFilterChange: (filter: BadgeFilter, additive?: boolean) => void;
   onEditTag: (tag: TagRecord) => void;
+  onDeleteRelation: (relationId: Id) => void;
   onToggle: () => void;
   onCreateTag: (name: string, color: string) => Promise<TagRecord | null>;
   onBindTag: (linkId: Id, tagId: Id) => Promise<void>;
@@ -630,6 +636,7 @@ function TagLinkGroup({
                 onTagClick={(tagId) => onBadgeFilterChange({ type: "tag", tagId })}
                 onRelationClick={(relationId) => onBadgeFilterChange({ type: "relation", relationId })}
                 onTagEdit={onEditTag}
+                onRelationDelete={onDeleteRelation}
               />
             ))}
           </div>
@@ -686,6 +693,7 @@ function RelationLinkGroup({
   selectedTagIds,
   onBadgeFilterChange,
   onEditTag,
+  onDeleteRelation,
   onCreateTag,
   onBindTag,
   onDeleteBinding,
@@ -705,6 +713,7 @@ function RelationLinkGroup({
   selectedTagIds: Set<Id>;
   onBadgeFilterChange: (filter: BadgeFilter, additive?: boolean) => void;
   onEditTag: (tag: TagRecord) => void;
+  onDeleteRelation: (relationId: Id) => void;
   onCreateTag: (name: string, color: string) => Promise<TagRecord | null>;
   onBindTag: (linkId: Id, tagId: Id) => Promise<void>;
   onDeleteBinding: (linkId: Id, tagId: Id) => void;
@@ -754,6 +763,7 @@ function RelationLinkGroup({
             activeRelation
             onRelationClick={(relationId) => onBadgeFilterChange({ type: "relation", relationId })}
             onTagEdit={onEditTag}
+            onRelationDelete={onDeleteRelation}
           />
         ) : undefined
       }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, cn } from "@linktag/ui";
 
@@ -168,35 +169,43 @@ export function LinkCard({
           >
             {tags.length}
           </span>
-          {popoverOpen ? (
-            <div
-              ref={panelRef}
-              className="fixed z-50 w-[22rem] max-w-[calc(100vw-24px)] rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-lg outline-none"
-              data-ui-name="链接绑定标签浮窗"
-              style={{ left: panelPosition.left, top: panelPosition.top }}
-            >
-              <TabBindingPanel
-                tab={{
-                  id: link.id,
-                  linkId: link.id,
-                  windowId: "",
-                  title: link.title,
-                  url: link.url,
-                }}
-                tags={tags}
-                allTags={allTags}
-                onCreateTag={onCreateTag!}
-                onBindTag={onBindTag!}
-                onDeleteBinding={onDeleteBinding!}
-                onBeforeBind={onBeforeBind}
-                priorityTagId={priorityTagId}
-              />
-            </div>
-          ) : null}
         </>
       ) : null}
     </div>
   );
+  const bindingPopover =
+    popoverOpen && canBind && typeof document !== "undefined" ? createPortal(
+      <div
+        ref={panelRef}
+        className="fixed z-50 w-[22rem] max-w-[calc(100vw-24px)] rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-lg outline-none"
+        data-ui-name="链接绑定标签浮窗"
+        style={{ left: panelPosition.left, top: panelPosition.top }}
+        draggable={false}
+        onContextMenu={(event) => event.preventDefault()}
+        onDragStart={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
+        <TabBindingPanel
+          tab={{
+            id: link.id,
+            linkId: link.id,
+            windowId: "",
+            title: link.title,
+            url: link.url,
+          }}
+          tags={tags}
+          allTags={allTags}
+          onCreateTag={onCreateTag!}
+          onBindTag={onBindTag!}
+          onDeleteBinding={onDeleteBinding!}
+          onBeforeBind={onBeforeBind}
+          priorityTagId={priorityTagId}
+        />
+      </div>,
+      document.body,
+    ) : null;
 
   return (
     <>
@@ -221,6 +230,7 @@ export function LinkCard({
       ) : (
         card
       )}
+      {bindingPopover}
       {onUpdateLink ? (
         <LinkEditDialog
           link={editingLink}

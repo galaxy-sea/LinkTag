@@ -515,6 +515,7 @@ export function App({
               onBindTag={bindTagToLink}
               onDeleteBinding={requestDeleteBinding}
               onEditTag={requestEditTag}
+              onDeleteRelation={deleteGraphRelation}
               onPersistRuntimeTabLink={persistRuntimeTabLink}
               onUpdateLink={updateLink}
               onReorderTagGroups={reorderTagGroups}

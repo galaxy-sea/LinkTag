@@ -3,6 +3,8 @@ import { nowIso } from "../db";
 import type { CollectionRecord, Id, LinkRecord, LinkTagRecord, TagRecord, TagRelationRecord } from "../types";
 import type { BackupData } from "./backup";
 
+const untaggedTagName = "无标签";
+
 type TabyLabel = {
   title?: unknown;
   color?: unknown;
@@ -168,6 +170,10 @@ export function parseTabyJsonFile(content: string): BackupData {
       const tagIds = [collectionTag?.id, ...labelTags.map((tag) => tag.id)].filter((tagId): tagId is Id =>
         Boolean(tagId),
       );
+      if (tagIds.length === 0) {
+        const untaggedTag = addTag(collection.id, untaggedTagName, colorForText(untaggedTagName));
+        if (untaggedTag) tagIds.push(untaggedTag.id);
+      }
 
       for (const cardValue of asArray<TabyCard>(collectionValue.cards)) {
         if (!isObject(cardValue)) continue;

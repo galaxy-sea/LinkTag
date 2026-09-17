@@ -258,14 +258,25 @@ export function useTagActions({
       await markCurrentLocalDataChanged();
     }
     if (deleteTarget.type === "tag") {
-      await db.transaction("rw", db.tags, db.link_tags, db.tag_relations, async () => {
+      await db.transaction("rw", db.links, db.tags, db.link_tags, db.tag_relations, async () => {
         await db.tags.where("[collectionId+id]").equals([collectionId, deleteTarget.tagId]).delete();
         const bindings = await db.link_tags
           .where("[collectionId+tagId]")
           .equals([collectionId, deleteTarget.tagId])
           .toArray();
+        const affectedLinkIds = [...new Set(bindings.map((binding) => binding.linkId))];
         await Promise.all(
           bindings.map((binding) => db.link_tags.delete([binding.collectionId, binding.linkId, binding.tagId])),
+        );
+        await Promise.all(
+          affectedLinkIds.map(async (linkId) => {
+            const remainingBindings = await db.link_tags
+              .where("[collectionId+linkId]")
+              .equals([collectionId, linkId])
+              .count();
+            if (remainingBindings === 0)
+              await db.links.where("[collectionId+id]").equals([collectionId, linkId]).delete();
+          }),
         );
         const relations = await db.tag_relations.where("collectionId").equals(collectionId).toArray();
         await db.tag_relations.bulkDelete(

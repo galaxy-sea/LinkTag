@@ -1,4 +1,4 @@
-import { type CSSProperties } from "react";
+import { type CSSProperties, type ReactElement } from "react";
 
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger, cn } from "@linktag/ui";
 
@@ -139,6 +139,7 @@ export function GroupRelationBadge({
   onTagClick,
   onRelationClick,
   onTagEdit,
+  onRelationDelete,
 }: {
   relation: TagRelationRecord;
   tag: TagRecord;
@@ -148,18 +149,84 @@ export function GroupRelationBadge({
   onTagClick?: (tagId: Id) => void;
   onRelationClick?: (relationId: Id) => void;
   onTagEdit?: (tag: TagRecord) => void;
+  onRelationDelete?: (relationId: Id) => void;
 }) {
   const relationName = relation.name || "关联";
   const relationColor = darkenHexColor(tag.color);
-  if (format === "tag")
+  const hasMenu = Boolean(onTagEdit || onRelationDelete);
+
+  const wrapMenu = (badge: ReactElement) => {
+    if (!hasMenu) return badge;
     return (
-      <GroupTagBadge
-        tag={tag}
-        active={activeTag}
-        onClick={onTagClick ? () => onTagClick(tag.id) : undefined}
-        onEdit={onTagEdit}
-      />
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{badge}</ContextMenuTrigger>
+        <ContextMenuContent
+          data-ui-name="分组关联标签右键菜单"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.stopPropagation()}
+        >
+          {onTagEdit ? (
+            <ContextMenuItem
+              data-ui-name="编辑标签名称"
+              onSelect={(event) => {
+                event.stopPropagation();
+                onTagEdit(tag);
+              }}
+            >
+              编辑
+            </ContextMenuItem>
+          ) : null}
+          {onRelationDelete ? (
+            <ContextMenuItem
+              data-ui-name="删除标签关系"
+              className="text-destructive focus:text-destructive"
+              onSelect={(event) => {
+                event.stopPropagation();
+                onRelationDelete(relation.id);
+              }}
+            >
+              删除
+            </ContextMenuItem>
+          ) : null}
+        </ContextMenuContent>
+      </ContextMenu>
     );
+  };
+
+  if (format === "tag") {
+    const badge = (
+      <span
+        className={cn(
+          "linktag-flow-tag mr-1 inline whitespace-normal break-all rounded-full px-2 py-0.5 align-middle text-xs font-medium leading-5 [overflow-wrap:anywhere]",
+          (onTagClick || hasMenu) && "cursor-pointer outline-none hover:ring-1 hover:ring-ring",
+          (activeTag || activeRelation) && "ring-2 ring-ring",
+        )}
+        data-ui-name="分组关联标签"
+        data-linktag-context-menu={hasMenu ? true : undefined}
+        onContextMenu={(event) => {
+          event.stopPropagation();
+        }}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+        }}
+        onClick={
+          onTagClick
+            ? (event) => {
+                event.stopPropagation();
+                onTagClick(tag.id);
+              }
+            : undefined
+        }
+        style={tagStyle(tag.color)}
+      >
+        <span className="inline whitespace-normal break-all [overflow-wrap:anywhere]" data-ui-name="分组关联标签名称">
+          {tag.name}
+        </span>
+      </span>
+    );
+    return wrapMenu(badge);
+  }
 
   const tagLabel = (
     <span
@@ -209,7 +276,7 @@ export function GroupRelationBadge({
         format === "relation-tag" && "linktag-flow-tag-arrow-start",
       )}
       data-ui-name="分组关联标签"
-      data-linktag-context-menu={onTagEdit ? true : undefined}
+      data-linktag-context-menu={hasMenu ? true : undefined}
       onContextMenu={(event) => {
         event.stopPropagation();
       }}
@@ -235,26 +302,5 @@ export function GroupRelationBadge({
       ) : null}
     </span>
   );
-  if (!onTagEdit) return badge;
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{badge}</ContextMenuTrigger>
-      <ContextMenuContent
-        data-ui-name="标签右键菜单"
-        onClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-        onContextMenu={(event) => event.stopPropagation()}
-      >
-        <ContextMenuItem
-          data-ui-name="编辑标签名称"
-          onSelect={(event) => {
-            event.stopPropagation();
-            onTagEdit(tag);
-          }}
-        >
-          编辑
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
-  );
+  return wrapMenu(badge);
 }

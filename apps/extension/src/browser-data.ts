@@ -189,7 +189,7 @@ const bookmarkTagColors = [
 ];
 
 const localBookmarkBackupFolderName = "LinkTag";
-const untaggedBookmarkFolderName = "未绑定标签";
+const untaggedBookmarkFolderName = "无标签";
 
 function colorForBookmarkPath(path: string[]) {
   return bookmarkTagColors[
@@ -270,20 +270,36 @@ export async function writeBrowserBookmarkBackup(data: BrowserBookmarkExportData
     for (const child of bookmarkFolder.children) await writeFolder(tagFolder.id, child);
   };
 
-  for (const bookmarkFolder of hierarchy.folders) {
-    await writeFolder(folder.id, bookmarkFolder);
-  }
+  if (hierarchy.collectionFolders.length > 0) {
+    for (const collectionFolder of hierarchy.collectionFolders) {
+      const collectionBookmarkFolder = await createBookmarkFolder(folder.id, collectionFolder.collection.name);
+      for (const bookmarkFolder of collectionFolder.folders) {
+        await writeFolder(collectionBookmarkFolder.id, bookmarkFolder);
+      }
+      if (collectionFolder.untaggedLinks.length > 0) {
+        const untaggedFolder = await createBookmarkFolder(collectionBookmarkFolder.id, untaggedBookmarkFolderName);
+        for (const link of collectionFolder.untaggedLinks) {
+          if (await createBookmark(untaggedFolder.id, link.title || link.url, link.url)) writtenCount += 1;
+        }
+      }
+    }
+  } else {
+    for (const bookmarkFolder of hierarchy.folders) {
+      await writeFolder(folder.id, bookmarkFolder);
+    }
 
-  if (hierarchy.untaggedLinks.length > 0) {
-    const untaggedFolder = await createBookmarkFolder(folder.id, untaggedBookmarkFolderName);
-    for (const link of hierarchy.untaggedLinks) {
-      if (await createBookmark(untaggedFolder.id, link.title || link.url, link.url)) writtenCount += 1;
+    if (hierarchy.untaggedLinks.length > 0) {
+      const untaggedFolder = await createBookmarkFolder(folder.id, untaggedBookmarkFolderName);
+      for (const link of hierarchy.untaggedLinks) {
+        if (await createBookmark(untaggedFolder.id, link.title || link.url, link.url)) writtenCount += 1;
+      }
     }
   }
 
   console.info("[LinkTag] 本地书签同步完成", {
     文件夹: localBookmarkBackupFolderName,
     链接数量: writtenCount,
+    集合数量: hierarchy.collectionFolders.length || 1,
     标签数量: data.tags.length,
   });
 }
@@ -346,7 +362,7 @@ export async function readBrowserBookmarkData(): Promise<BrowserBookmarkImportDa
       .filter((tagId): tagId is Id => Boolean(tagId));
     if (tagIds.length === 0 && currentTagId) tagIds.push(currentTagId);
     if (tagIds.length === 0) {
-      const fallbackTag = addFolderTag(["浏览器书签"]);
+      const fallbackTag = addFolderTag([untaggedBookmarkFolderName]);
       if (fallbackTag) tagIds.push(fallbackTag.id);
     }
     for (const tagId of tagIds) {

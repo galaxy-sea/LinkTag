@@ -1,6 +1,6 @@
 import { colorChoices } from "../core/colors";
 import { getActiveCollectionId, nowIso } from "../db";
-import type { Id, LinkRecord, LinkTagRecord, TagRecord, TagRelationRecord } from "../types";
+import type { CollectionRecord, Id, LinkRecord, LinkTagRecord, TagRecord, TagRelationRecord } from "../types";
 
 export type BrowserBookmarkImportData = {
   links: LinkRecord[];
@@ -10,10 +10,13 @@ export type BrowserBookmarkImportData = {
 };
 
 export type BrowserBookmarkExportData = {
+  collections?: CollectionRecord[];
   links: LinkRecord[];
   tags: TagRecord[];
   linkTags: LinkTagRecord[];
 };
+
+const untaggedBookmarkFolderName = "无标签";
 
 export type BrowserBookmarkFolder = {
   tag: TagRecord;
@@ -22,6 +25,13 @@ export type BrowserBookmarkFolder = {
 };
 
 export type BrowserBookmarkHierarchy = {
+  collectionFolders: BrowserBookmarkCollectionFolder[];
+  folders: BrowserBookmarkFolder[];
+  untaggedLinks: LinkRecord[];
+};
+
+export type BrowserBookmarkCollectionFolder = {
+  collection: CollectionRecord;
   folders: BrowserBookmarkFolder[];
   untaggedLinks: LinkRecord[];
 };
@@ -76,31 +86,88 @@ function compareTags(left: TagRecord, right: TagRecord) {
   return left.name.localeCompare(right.name);
 }
 
+function compareCollections(left: CollectionRecord, right: CollectionRecord) {
+  const sortDiff = (right.sort ?? 0) - (left.sort ?? 0);
+  if (sortDiff !== 0) return sortDiff;
+  const rightUpdatedAt = Date.parse(right.updatedAt) || 0;
+  const leftUpdatedAt = Date.parse(left.updatedAt) || 0;
+  return rightUpdatedAt - leftUpdatedAt || left.name.localeCompare(right.name);
+}
+
 function compareLinkBindings(left: LinkTagRecord, right: LinkTagRecord) {
   const sortDiff = (right.sort ?? 0) - (left.sort ?? 0);
   if (sortDiff !== 0) return sortDiff;
   return left.linkId.localeCompare(right.linkId);
 }
 
-function linksForTag(tagId: Id, linkTags: LinkTagRecord[], linksById: Map<Id, LinkRecord>) {
+function linksForTag(collectionId: Id, tagId: Id, linkTags: LinkTagRecord[], linksById: Map<Id, LinkRecord>) {
   return linkTags
-    .filter((binding) => binding.tagId === tagId)
+    .filter((binding) => binding.collectionId === collectionId && binding.tagId === tagId)
     .sort(compareLinkBindings)
     .map((binding) => linksById.get(binding.linkId))
     .filter((link): link is LinkRecord => Boolean(link));
 }
 
-export function createBrowserBookmarkHierarchy(data: BrowserBookmarkExportData): BrowserBookmarkHierarchy {
-  const linksById = new Map(data.links.map((link) => [link.id, link]));
-  const linkTagIds = new Set(data.linkTags.map((binding) => binding.linkId));
+function createFlatBrowserBookmarkHierarchy(
+  links: LinkRecord[],
+  tags: TagRecord[],
+  linkTags: LinkTagRecord[],
+): Pick<BrowserBookmarkHierarchy, "folders" | "untaggedLinks"> {
+  const linksById = new Map(links.map((link) => [link.id, link]));
+  const linkTagIds = new Set(linkTags.map((binding) => binding.linkId));
+  const collectionId = links[0]?.collectionId ?? tags[0]?.collectionId ?? linkTags[0]?.collectionId ?? "";
 
   return {
-    folders: [...data.tags].sort(compareTags).map((tag) => ({
+    folders: [...tags].sort(compareTags).map((tag) => ({
       tag,
-      links: linksForTag(tag.id, data.linkTags, linksById),
+      links: linksForTag(tag.collectionId || collectionId, tag.id, linkTags, linksById),
       children: [],
     })),
-    untaggedLinks: data.links.filter((link) => !linkTagIds.has(link.id)),
+    untaggedLinks: links.filter((link) => !linkTagIds.has(link.id)),
+  };
+}
+
+function collectBookmarkCollections(data: BrowserBookmarkExportData) {
+  const byId = new Map((data.collections ?? []).map((collection) => [collection.id, collection]));
+  for (const collectionId of [
+    ...data.links.map((link) => link.collectionId),
+    ...data.tags.map((tag) => tag.collectionId),
+    ...data.linkTags.map((binding) => binding.collectionId),
+  ]) {
+    if (!byId.has(collectionId)) {
+      byId.set(collectionId, {
+        id: collectionId,
+        name: collectionId,
+        updatedAt: "",
+        sort: 0,
+      });
+    }
+  }
+  return [...byId.values()].sort(compareCollections);
+}
+
+export function createBrowserBookmarkHierarchy(data: BrowserBookmarkExportData): BrowserBookmarkHierarchy {
+  if (!data.collections?.length) {
+    return {
+      collectionFolders: [],
+      ...createFlatBrowserBookmarkHierarchy(data.links, data.tags, data.linkTags),
+    };
+  }
+
+  const collectionFolders = collectBookmarkCollections(data).map((collection) => {
+    const links = data.links.filter((link) => link.collectionId === collection.id);
+    const tags = data.tags.filter((tag) => tag.collectionId === collection.id);
+    const linkTags = data.linkTags.filter((binding) => binding.collectionId === collection.id);
+    return {
+      collection,
+      ...createFlatBrowserBookmarkHierarchy(links, tags, linkTags),
+    };
+  });
+
+  return {
+    collectionFolders,
+    folders: [],
+    untaggedLinks: [],
   };
 }
 
@@ -124,6 +191,26 @@ function linkBookmarkLine(link: LinkRecord, timestamp: number, indent = "       
   ].filter((line): line is string => Boolean(line));
 }
 
+function pushBookmarkCollectionLines(
+  lines: string[],
+  collectionFolder: BrowserBookmarkCollectionFolder,
+  timestamp: number,
+  indent: string,
+) {
+  lines.push(
+    `${indent}<DT><H3 ADD_DATE="${timestamp}" LAST_MODIFIED="${timestamp}">${escapeHtml(collectionFolder.collection.name)}</H3>`,
+  );
+  lines.push(`${indent}<DL><p>`);
+  for (const folder of collectionFolder.folders) pushBookmarkFolderLines(lines, folder, timestamp, `${indent}    `);
+  if (collectionFolder.untaggedLinks.length > 0) {
+    lines.push(`${indent}    <DT><H3 ADD_DATE="${timestamp}" LAST_MODIFIED="${timestamp}">${untaggedBookmarkFolderName}</H3>`);
+    lines.push(`${indent}    <DL><p>`);
+    for (const link of collectionFolder.untaggedLinks) lines.push(...linkBookmarkLine(link, timestamp, `${indent}        `));
+    lines.push(`${indent}    </DL><p>`);
+  }
+  lines.push(`${indent}</DL><p>`);
+}
+
 export function createBrowserBookmarkHtml(data: BrowserBookmarkExportData) {
   const timestamp = bookmarkTimestamp();
   const hierarchy = createBrowserBookmarkHierarchy(data);
@@ -137,13 +224,19 @@ export function createBrowserBookmarkHtml(data: BrowserBookmarkExportData) {
     "    <DL><p>",
   ];
 
-  for (const folder of hierarchy.folders) pushBookmarkFolderLines(lines, folder, timestamp, "        ");
+  if (hierarchy.collectionFolders.length > 0) {
+    for (const collectionFolder of hierarchy.collectionFolders) {
+      pushBookmarkCollectionLines(lines, collectionFolder, timestamp, "        ");
+    }
+  } else {
+    for (const folder of hierarchy.folders) pushBookmarkFolderLines(lines, folder, timestamp, "        ");
 
-  if (hierarchy.untaggedLinks.length > 0) {
-    lines.push(`        <DT><H3 ADD_DATE="${timestamp}" LAST_MODIFIED="${timestamp}">未绑定标签</H3>`);
-    lines.push("        <DL><p>");
-    for (const link of hierarchy.untaggedLinks) lines.push(...linkBookmarkLine(link, timestamp));
-    lines.push("        </DL><p>");
+    if (hierarchy.untaggedLinks.length > 0) {
+      lines.push(`        <DT><H3 ADD_DATE="${timestamp}" LAST_MODIFIED="${timestamp}">${untaggedBookmarkFolderName}</H3>`);
+      lines.push("        <DL><p>");
+      for (const link of hierarchy.untaggedLinks) lines.push(...linkBookmarkLine(link, timestamp));
+      lines.push("        </DL><p>");
+    }
   }
 
   lines.push("    </DL><p>", "</DL><p>");
@@ -224,7 +317,7 @@ export function parseBrowserBookmarkFile(content: string): BrowserBookmarkImport
       .filter((tagId): tagId is Id => Boolean(tagId));
     if (tagIds.length === 0 && currentTagId) tagIds.push(currentTagId);
     if (tagIds.length === 0) {
-      const fallbackTag = addFolderTag(currentPath.length > 0 ? currentPath : ["浏览器书签"]);
+      const fallbackTag = addFolderTag(currentPath.length > 0 ? currentPath : [untaggedBookmarkFolderName]);
       if (fallbackTag) tagIds.push(fallbackTag.id);
     }
     for (const tagId of tagIds) {

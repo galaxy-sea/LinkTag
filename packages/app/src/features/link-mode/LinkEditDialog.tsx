@@ -62,6 +62,7 @@ export function LinkEditDialog({
   });
   const persist = () => {
     if (!autoSave || !link) return;
+    if (onCreateTag && onBindTag && onDeleteBinding && tags.length === 0) return;
     const values = currentValues();
     if (!values.title.trim() || !values.url.trim()) return;
     if (values.title === link.title && values.url === link.url && values.note === (link.note ?? "")) return;
