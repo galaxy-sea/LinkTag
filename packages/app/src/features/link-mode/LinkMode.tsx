@@ -9,7 +9,10 @@ import {
   getDragPoint,
   getDragPointTarget,
   getElementDragPlacement,
+  hasWindowTabDragPayload,
+  readWindowTabDragPayload,
   setElementDragImage,
+  type WindowTabDragPayload,
 } from "../../core/drag";
 import type { BadgeFilter } from "../../core/filters";
 import { moveId, sameIds } from "../../core/sort";
@@ -129,6 +132,8 @@ export function LinkMode({
   const [draggedTagGroupId, setDraggedTagGroupId] = useState<Id | null>(null);
   const [previewTagGroupIds, setPreviewTagGroupIds] = useState<Id[] | null>(null);
   const [optimisticTagGroupIds, setOptimisticTagGroupIds] = useState<Id[] | null>(null);
+  const [draggedWindowTabPayload, setDraggedWindowTabPayload] = useState<WindowTabDragPayload | null>(null);
+  const [windowDropPreviewTagId, setWindowDropPreviewTagId] = useState<Id | null>(null);
   const tagGroupDragPointRef = useRef<DragPoint | null>(null);
   const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags]);
   const linksById = useMemo(() => new Map(links.map((link) => [link.id, link])), [links]);
@@ -234,6 +239,11 @@ export function LinkMode({
       side={side}
       edgeToEdge={edgeToEdge}
       showEmptyGroups={side}
+      onWindowTabDragStart={setDraggedWindowTabPayload}
+      onWindowTabDragEnd={() => {
+        setDraggedWindowTabPayload(null);
+        setWindowDropPreviewTagId(null);
+      }}
     />
   );
 
@@ -366,11 +376,15 @@ export function LinkMode({
           onBindTag={onBindTag}
           onDeleteBinding={onDeleteBinding}
           onUpdateLink={onUpdateLink}
+          onPersistRuntimeTabLink={onPersistRuntimeTabLink}
           onReorderLinks={onReorderLinks}
           activeBindingPopoverId={activeBindingPopoverId}
           onOpenBindingPopover={openBindingPopover}
           onCloseBindingPopover={closeBindingPopover}
           onOpenLinks={onOpenLinks}
+          draggedWindowTabPayload={draggedWindowTabPayload}
+          windowDropPreviewTagId={windowDropPreviewTagId}
+          onWindowDropPreviewTagChange={setWindowDropPreviewTagId}
           dragEnabled={canDragTagGroups}
           dragging={draggedTagGroupId === tag.id}
           onDragStart={(event) => {
@@ -496,11 +510,15 @@ function TagLinkGroup({
   onBindTag,
   onDeleteBinding,
   onUpdateLink,
+  onPersistRuntimeTabLink,
   onReorderLinks,
   activeBindingPopoverId,
   onOpenBindingPopover,
   onCloseBindingPopover,
   onOpenLinks,
+  draggedWindowTabPayload,
+  windowDropPreviewTagId,
+  onWindowDropPreviewTagChange,
   dragEnabled,
   dragging,
   onDragStart,
@@ -531,11 +549,15 @@ function TagLinkGroup({
   onBindTag: (linkId: Id, tagId: Id) => Promise<void>;
   onDeleteBinding: (linkId: Id, tagId: Id) => void;
   onUpdateLink: (linkId: Id, values: LinkEditValues) => Promise<void>;
+  onPersistRuntimeTabLink: (tab: BrowserTab) => Promise<void>;
   onReorderLinks: (orderedLinks: LinkRecord[], tagId?: Id) => Promise<void>;
   activeBindingPopoverId: string | null;
   onOpenBindingPopover: (id: string) => void;
   onCloseBindingPopover: (id: string) => void;
   onOpenLinks?: (links: LinkRecord[], title: string) => void;
+  draggedWindowTabPayload: WindowTabDragPayload | null;
+  windowDropPreviewTagId: Id | null;
+  onWindowDropPreviewTagChange: (tagId: Id | null) => void;
   dragEnabled: boolean;
   dragging: boolean;
   onDragStart: (event: ReactDragEvent<HTMLDivElement>) => void;
@@ -556,10 +578,15 @@ function TagLinkGroup({
     [linkData, tagsById],
   );
   const [visibleCount, setVisibleCount] = useState(groupRenderStep);
+  const [previewWindowLinks, setPreviewWindowLinks] = useState<LinkRecord[] | null>(null);
 
   useEffect(() => {
     setVisibleCount(groupRenderStep);
   }, [tag.id, searchQuery, selectedTagIdList, activeRelationIds]);
+
+  useEffect(() => {
+    if (!draggedWindowTabPayload || windowDropPreviewTagId !== tag.id) setPreviewWindowLinks(null);
+  }, [draggedWindowTabPayload, tag.id, windowDropPreviewTagId]);
 
   const visibleLinks = useMemo(
     () =>
@@ -586,11 +613,74 @@ function TagLinkGroup({
 
   if (forceLoad && liveLinkData && visibleLinks.length === 0 && !searchMatchesTag(tag, searchQuery)) return null;
 
-  const renderedLinks = visibleLinks.slice(0, visibleCount);
-  const hasMore = visibleCount < visibleLinks.length;
+  const visibleLinksWithPreview = previewWindowLinks ?? visibleLinks;
+  const renderedLinks = visibleLinksWithPreview.slice(0, visibleCount);
+  const hasMore = visibleCount < visibleLinksWithPreview.length;
   const canUseTotalLinkCount =
     searchIsEmpty(searchQuery) && selectedTagIdList.length === 0 && activeRelationIds.size === 0;
   const count = liveLinkData ? visibleLinks.length : canUseTotalLinkCount ? totalLinkCount : null;
+  const orderedLinksForDroppedWindowLink = (
+    event: ReactDragEvent<HTMLDivElement>,
+    droppedLink: LinkRecord,
+    currentPreview = previewWindowLinks,
+  ) => {
+    const currentLinks = visibleLinks.slice(0, visibleCount).filter((link) => link.id !== droppedLink.id);
+    const point = getDragPoint(event);
+    const target = getDragPointTarget(point, "[data-linktag-link-sort-id]");
+    const targetId = target?.dataset.linktagLinkSortId;
+    if (targetId === droppedLink.id) return currentPreview ?? [...currentLinks, droppedLink];
+    const targetIndex = targetId ? currentLinks.findIndex((link) => link.id === targetId) : -1;
+    if (!point || !target || targetIndex < 0) return [...currentLinks, droppedLink];
+    const placement = getElementDragPlacement({
+      currentTarget: target,
+      clientX: point.clientX,
+      clientY: point.clientY,
+    });
+    const insertIndex = placement === "before" ? targetIndex : targetIndex + 1;
+    return [...currentLinks.slice(0, insertIndex), droppedLink, ...currentLinks.slice(insertIndex)];
+  };
+  const bindDroppedWindowLink = async (event: ReactDragEvent<HTMLDivElement>) => {
+    const payload = readWindowTabDragPayload(event.dataTransfer) ?? draggedWindowTabPayload;
+    if (!payload) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const orderedLinks = previewWindowLinks ?? orderedLinksForDroppedWindowLink(event, payload.link);
+    setPreviewWindowLinks(null);
+    onWindowDropPreviewTagChange(null);
+    await onPersistRuntimeTabLink({
+      ...payload.tab,
+      title: payload.link.title,
+      url: payload.link.url,
+    });
+    await onBindTag(payload.link.id, tag.id);
+    await onReorderLinks(orderedLinks, tag.id);
+  };
+  const handleDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (hasWindowTabDragPayload(event.dataTransfer)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      const droppedLink = draggedWindowTabPayload?.link;
+      if (droppedLink) {
+        onWindowDropPreviewTagChange(tag.id);
+        setPreviewWindowLinks((current) => {
+          const next = orderedLinksForDroppedWindowLink(event, droppedLink, current);
+          const currentIds = current?.map((link) => link.id) ?? [];
+          const nextIds = next.map((link) => link.id);
+          return sameIds(currentIds, nextIds) ? current : next;
+        });
+      }
+      return;
+    }
+    if (dragEnabled) onDragOver(event);
+  };
+  const handleDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (hasWindowTabDragPayload(event.dataTransfer)) {
+      void bindDroppedWindowLink(event);
+      return;
+    }
+    if (dragEnabled) onDrop(event);
+  };
 
   return (
     <div
@@ -601,8 +691,8 @@ function TagLinkGroup({
       onDragStart={dragEnabled ? onDragStart : undefined}
       onDrag={dragEnabled ? onDrag : undefined}
       onDragEnd={dragEnabled ? onDragEnd : undefined}
-      onDragOver={dragEnabled ? onDragOver : undefined}
-      onDrop={dragEnabled ? onDrop : undefined}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       <GroupShell
         title={tag.name}
@@ -675,7 +765,7 @@ function TagLinkGroup({
               setVisibleCount((current) => current + groupRenderStep);
             }}
           >
-            更多 {Math.min(groupRenderStep, visibleLinks.length - visibleCount)}
+            更多 {Math.min(groupRenderStep, visibleLinksWithPreview.length - visibleCount)}
           </div>
         ) : null}
       </GroupShell>
@@ -1003,6 +1093,7 @@ function LinkGroupCards({
             });
           }}
           onDrop={(event) => {
+            if (hasWindowTabDragPayload(event.dataTransfer)) return;
             event.stopPropagation();
             event.preventDefault();
           }}

@@ -366,16 +366,19 @@ export function CollectionDrawer({
                       event.preventDefault();
                     }}
                   >
-                    <span
-                      className={cn(
-                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-xs font-semibold",
-                        active ? "bg-primary-foreground/20" : "bg-secondary text-secondary-foreground",
-                      )}
-                      aria-hidden="true"
-                    >
-                      {collectionInitial(collection.name)}
-                    </span>
-                    {expanded ? <span className="min-w-0 truncate">{collection.name}</span> : null}
+                    {expanded ? (
+                      <span className="min-w-0 truncate">{collection.name}</span>
+                    ) : (
+                      <span
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-xs font-semibold",
+                          active ? "bg-primary-foreground/20" : "bg-secondary text-secondary-foreground",
+                        )}
+                        aria-hidden="true"
+                      >
+                        {collectionInitial(collection.name)}
+                      </span>
+                    )}
                   </Button>
                 );
                 return (

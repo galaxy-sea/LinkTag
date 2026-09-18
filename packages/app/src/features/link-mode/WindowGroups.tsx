@@ -8,6 +8,7 @@ import {
   getDragPointTarget,
   getElementDragPlacement,
   setElementDragImage,
+  writeWindowTabDragPayload,
 } from "../../core/drag";
 import { linkGroupLayoutClassName } from "../../core/link-mode-utils";
 import { searchIsEmpty, searchMatchesTab, type ParsedSearchQuery } from "../../core/search";
@@ -40,6 +41,8 @@ export function WindowGroups({
   activeBindingPopoverId,
   onOpenBindingPopover,
   onCloseBindingPopover,
+  onWindowTabDragStart,
+  onWindowTabDragEnd,
   side = false,
   edgeToEdge = false,
   showEmptyGroups = false,
@@ -66,12 +69,15 @@ export function WindowGroups({
   activeBindingPopoverId: string | null;
   onOpenBindingPopover: (id: string) => void;
   onCloseBindingPopover: (id: string) => void;
+  onWindowTabDragStart?: (payload: { tab: BrowserTab; link: LinkRecord }) => void;
+  onWindowTabDragEnd?: () => void;
   side?: boolean;
   edgeToEdge?: boolean;
   showEmptyGroups?: boolean;
 }) {
   const canReorderWindowLinks = false;
   const [linkDragState, setLinkDragState] = useState<{ groupKey: string; linkId: Id; orderedIds: Id[] } | null>(null);
+  const [draggedWindowLinkId, setDraggedWindowLinkId] = useState<Id | null>(null);
   const [optimisticLinkOrders, setOptimisticLinkOrders] = useState<Record<string, Id[]>>({});
   const linkDragPointRef = useRef<DragPoint | null>(null);
   const currentWindowLinkOrders = useMemo(
@@ -202,28 +208,36 @@ export function WindowGroups({
                     key={tab.id}
                     className={cn(
                       "min-w-0",
-                      canReorderWindowLinks && "cursor-grab",
-                      linkDragState?.linkId === cardLink.id && "opacity-50",
+                      "cursor-grab",
+                      (linkDragState?.linkId === cardLink.id || draggedWindowLinkId === cardLink.id) && "opacity-50",
                     )}
                     data-linktag-window-link-group={groupKey}
                     data-linktag-window-link-sort-id={cardLink.id}
-                    draggable={canReorderWindowLinks}
-                    onDragStart={
-                      canReorderWindowLinks
-                        ? (event) => {
-                            event.stopPropagation();
-                            linkDragPointRef.current = getDragPoint(event);
-                            setLinkDragState({
-                              groupKey,
-                              linkId: cardLink.id,
-                              orderedIds: effectiveLinkIds,
-                            });
-                            setElementDragImage(event);
-                            event.dataTransfer.effectAllowed = "move";
-                            event.dataTransfer.setData("text/plain", cardLink.id);
-                          }
-                        : undefined
-                    }
+                    draggable
+                    onDragStart={(event) => {
+                      event.stopPropagation();
+                      setDraggedWindowLinkId(cardLink.id);
+                      setElementDragImage(event);
+                      event.dataTransfer.effectAllowed = "copy";
+                      const payload = {
+                        tab: {
+                          ...tab,
+                          title: cardLink.title,
+                          url: cardLink.url,
+                        },
+                        link: cardLink,
+                      };
+                      onWindowTabDragStart?.(payload);
+                      writeWindowTabDragPayload(event.dataTransfer, payload);
+                      if (canReorderWindowLinks) {
+                        linkDragPointRef.current = getDragPoint(event);
+                        setLinkDragState({
+                          groupKey,
+                          linkId: cardLink.id,
+                          orderedIds: effectiveLinkIds,
+                        });
+                      }
+                    }}
                     onDrag={
                       canReorderWindowLinks
                         ? (event) => {
@@ -232,44 +246,42 @@ export function WindowGroups({
                           }
                         : undefined
                     }
-                    onDragEnd={
-                      canReorderWindowLinks
-                        ? (event) => {
-                            event.stopPropagation();
-                            const point = getDragPoint(event) ?? linkDragPointRef.current;
-                            const target = getDragPointTarget(point, "[data-linktag-window-link-sort-id]");
-                            const targetId = target?.dataset.linktagWindowLinkSortId;
-                            const targetGroupKey = target?.dataset.linktagWindowLinkGroup;
-                            const sourceIds = linkDragState?.orderedIds ?? effectiveLinkIds;
-                            const resolvedIds =
-                              linkDragState &&
-                              target &&
-                              targetId &&
-                              targetGroupKey === groupKey &&
-                              targetId !== linkDragState.linkId
-                                ? moveId(
-                                    sourceIds,
-                                    linkDragState.linkId,
-                                    targetId,
-                                    getElementDragPlacement({
-                                      currentTarget: target,
-                                      clientX: point!.clientX,
-                                      clientY: point!.clientY,
-                                    }),
-                                  )
-                                : linkDragState?.orderedIds;
-                            const orderedIds =
-                              linkDragState?.groupKey === groupKey &&
-                              resolvedIds &&
-                              !sameIds(resolvedIds, effectiveLinkIds)
-                                ? resolvedIds
-                                : null;
-                            linkDragPointRef.current = null;
-                            setLinkDragState(null);
-                            if (orderedIds) persistLinkOrder(groupKey, groupLinks, orderedIds);
-                          }
-                        : undefined
-                    }
+                    onDragEnd={(event) => {
+                      event.stopPropagation();
+                      setDraggedWindowLinkId(null);
+                      onWindowTabDragEnd?.();
+                      if (canReorderWindowLinks) {
+                        const point = getDragPoint(event) ?? linkDragPointRef.current;
+                        const target = getDragPointTarget(point, "[data-linktag-window-link-sort-id]");
+                        const targetId = target?.dataset.linktagWindowLinkSortId;
+                        const targetGroupKey = target?.dataset.linktagWindowLinkGroup;
+                        const sourceIds = linkDragState?.orderedIds ?? effectiveLinkIds;
+                        const resolvedIds =
+                          linkDragState &&
+                          target &&
+                          targetId &&
+                          targetGroupKey === groupKey &&
+                          targetId !== linkDragState.linkId
+                            ? moveId(
+                                sourceIds,
+                                linkDragState.linkId,
+                                targetId,
+                                getElementDragPlacement({
+                                  currentTarget: target,
+                                  clientX: point!.clientX,
+                                  clientY: point!.clientY,
+                                }),
+                              )
+                            : linkDragState?.orderedIds;
+                        const orderedIds =
+                          linkDragState?.groupKey === groupKey && resolvedIds && !sameIds(resolvedIds, effectiveLinkIds)
+                            ? resolvedIds
+                            : null;
+                        linkDragPointRef.current = null;
+                        setLinkDragState(null);
+                        if (orderedIds) persistLinkOrder(groupKey, groupLinks, orderedIds);
+                      }
+                    }}
                     onDragOver={canReorderWindowLinks ? handleDragOver : undefined}
                     onDrop={
                       canReorderWindowLinks
