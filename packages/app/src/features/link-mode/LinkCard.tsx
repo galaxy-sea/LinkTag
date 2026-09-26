@@ -65,8 +65,9 @@ export function LinkCard({
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const panelWidth = Math.min(352, window.innerWidth - 24);
+    const panelHeight = Math.min(560, window.innerHeight - 24);
     const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - panelWidth - 12));
-    const top = Math.min(rect.bottom + 8, Math.max(12, window.innerHeight - 220));
+    const top = Math.min(rect.bottom + 8, Math.max(12, window.innerHeight - panelHeight - 12));
     setPanelPosition({ left, top });
   }, []);
   const openThisPopover = () => {
@@ -177,9 +178,13 @@ export function LinkCard({
     popoverOpen && canBind && typeof document !== "undefined" ? createPortal(
       <div
         ref={panelRef}
-        className="fixed z-50 w-[22rem] max-w-[calc(100vw-24px)] rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-lg outline-none"
+        className="fixed z-50 w-[22rem] max-w-[calc(100vw-24px)] overflow-y-auto rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-lg outline-none"
         data-ui-name="链接绑定标签浮窗"
-        style={{ left: panelPosition.left, top: panelPosition.top }}
+        style={{
+          left: panelPosition.left,
+          top: panelPosition.top,
+          maxHeight: `calc(100dvh - ${panelPosition.top + 12}px)`,
+        }}
         draggable={false}
         onContextMenu={(event) => event.preventDefault()}
         onDragStart={(event) => {

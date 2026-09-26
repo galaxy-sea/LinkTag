@@ -76,18 +76,25 @@ export function WindowGroups({
   showEmptyGroups?: boolean;
 }) {
   const canReorderWindowLinks = false;
-  const [linkDragState, setLinkDragState] = useState<{ groupKey: string; linkId: Id; orderedIds: Id[] } | null>(null);
-  const [draggedWindowLinkId, setDraggedWindowLinkId] = useState<Id | null>(null);
-  const [optimisticLinkOrders, setOptimisticLinkOrders] = useState<Record<string, Id[]>>({});
+  const [linkDragState, setLinkDragState] = useState<{
+    groupKey: string;
+    instanceId: string;
+    orderedIds: string[];
+  } | null>(null);
+  const [draggedWindowLinkInstanceId, setDraggedWindowLinkInstanceId] = useState<string | null>(null);
+  const [optimisticLinkOrders, setOptimisticLinkOrders] = useState<Record<string, string[]>>({});
   const linkDragPointRef = useRef<DragPoint | null>(null);
   const currentWindowLinkOrders = useMemo(
     () =>
       windows.map((window) => {
         const groupKey = `window:${window.id}`;
         const visibleLinks = window.tabs
-          .map((tab, index) => ({ link: tabToLinkRecord(tab, linksById, collectionId), index }))
+          .map((tab, index) => {
+            const link = tabToLinkRecord(tab, linksById, collectionId);
+            return { link, instanceId: getWindowLinkInstanceId(groupKey, tab, link, index), index };
+          })
           .sort((left, right) => left.index - right.index);
-        return { groupKey, orderedIds: visibleLinks.map((item) => item.link.id) };
+        return { groupKey, orderedIds: visibleLinks.map((item) => item.instanceId) };
       }),
     [collectionId, linksById, windows],
   );
@@ -110,12 +117,16 @@ export function WindowGroups({
     setOptimisticLinkOrders({});
   }, [collectionId]);
 
-  const persistLinkOrder = (groupKey: string, links: LinkRecord[], orderedIds: Id[]) => {
-    const linksById = new Map(links.map((link) => [link.id, link]));
+  const persistLinkOrder = (
+    groupKey: string,
+    links: Array<{ instanceId: string; link: LinkRecord }>,
+    orderedIds: string[],
+  ) => {
+    const linksByInstanceId = new Map(links.map((item) => [item.instanceId, item.link]));
     const orderedLinks = orderedIds
-      .map((linkId) => linksById.get(linkId))
+      .map((instanceId) => linksByInstanceId.get(instanceId))
       .filter((link): link is LinkRecord => Boolean(link));
-    setOptimisticLinkOrders((current) => ({ ...current, [groupKey]: orderedLinks.map((link) => link.id) }));
+    setOptimisticLinkOrders((current) => ({ ...current, [groupKey]: orderedIds }));
     void onReorderLinks(orderedLinks).catch((error: unknown) => {
       console.error("[LinkTag] 保存窗口链接排序失败", error);
     });
@@ -140,24 +151,27 @@ export function WindowGroups({
         if (filterQuery && !searchIsEmpty(searchQuery) && visibleTabs.length === 0 && !showEmptyGroups) return null;
         const groupKey = `window:${window.id}`;
         const visibleLinks = visibleTabs
-          .map((tab, index) => ({ tab, link: tabToLinkRecord(tab, linksById, collectionId), index }))
+          .map((tab, index) => {
+            const link = tabToLinkRecord(tab, linksById, collectionId);
+            return { tab, link, instanceId: getWindowLinkInstanceId(groupKey, tab, link, index), index };
+          })
           .sort((left, right) => left.index - right.index);
         const groupLinks = visibleLinks.map((item) => item.link);
-        const visibleLinksByLinkId = new Map(visibleLinks.map((item) => [item.link.id, item]));
+        const visibleLinksByInstanceId = new Map(visibleLinks.map((item) => [item.instanceId, item]));
         const optimisticLinkIds = optimisticLinkOrders[groupKey] ?? null;
         const effectiveLinkIds = optimisticLinkIds
           ? [
-              ...optimisticLinkIds.filter((linkId) => visibleLinksByLinkId.has(linkId)),
-              ...groupLinks.map((link) => link.id).filter((linkId) => !optimisticLinkIds.includes(linkId)),
+              ...optimisticLinkIds.filter((instanceId) => visibleLinksByInstanceId.has(instanceId)),
+              ...visibleLinks.map((item) => item.instanceId).filter((instanceId) => !optimisticLinkIds.includes(instanceId)),
             ]
-          : groupLinks.map((link) => link.id);
+          : visibleLinks.map((item) => item.instanceId);
         const renderedLinks =
           linkDragState?.groupKey === groupKey
             ? linkDragState.orderedIds
-                .map((linkId) => visibleLinksByLinkId.get(linkId))
+                .map((instanceId) => visibleLinksByInstanceId.get(instanceId))
                 .filter((item): item is (typeof visibleLinks)[number] => Boolean(item))
             : effectiveLinkIds
-                .map((linkId) => visibleLinksByLinkId.get(linkId))
+                .map((instanceId) => visibleLinksByInstanceId.get(instanceId))
                 .filter((item): item is (typeof visibleLinks)[number] => Boolean(item));
         const isCollapsed =
           visibleTabs.length > 0 && (!filterQuery || searchIsEmpty(searchQuery)) && collapsed[groupKey];
@@ -186,10 +200,10 @@ export function WindowGroups({
                   没有链接
                 </div>
               ) : null}
-              {renderedLinks.map(({ tab, link: cardLink }) => {
+              {renderedLinks.map(({ tab, link: cardLink, instanceId }) => {
                 const handleDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
                   linkDragPointRef.current = getDragPoint(event);
-                  if (!linkDragState || linkDragState.groupKey !== groupKey || linkDragState.linkId === cardLink.id)
+                  if (!linkDragState || linkDragState.groupKey !== groupKey || linkDragState.instanceId === instanceId)
                     return;
                   event.stopPropagation();
                   event.preventDefault();
@@ -197,7 +211,7 @@ export function WindowGroups({
                   const placement = getElementDragPlacement(event);
                   setLinkDragState((current) => {
                     if (!current || current.groupKey !== groupKey) return current;
-                    const orderedIds = moveId(current.orderedIds, current.linkId, cardLink.id, placement);
+                    const orderedIds = moveId(current.orderedIds, current.instanceId, instanceId, placement);
                     return orderedIds.every((id, index) => id === current.orderedIds[index])
                       ? current
                       : { ...current, orderedIds };
@@ -205,18 +219,19 @@ export function WindowGroups({
                 };
                 return (
                   <div
-                    key={tab.id}
+                    key={instanceId}
                     className={cn(
                       "min-w-0",
                       "cursor-grab",
-                      (linkDragState?.linkId === cardLink.id || draggedWindowLinkId === cardLink.id) && "opacity-50",
+                      (linkDragState?.instanceId === instanceId || draggedWindowLinkInstanceId === instanceId) &&
+                        "opacity-50",
                     )}
                     data-linktag-window-link-group={groupKey}
-                    data-linktag-window-link-sort-id={cardLink.id}
+                    data-linktag-window-link-sort-id={instanceId}
                     draggable
                     onDragStart={(event) => {
                       event.stopPropagation();
-                      setDraggedWindowLinkId(cardLink.id);
+                      setDraggedWindowLinkInstanceId(instanceId);
                       setElementDragImage(event);
                       event.dataTransfer.effectAllowed = "copy";
                       const payload = {
@@ -233,7 +248,7 @@ export function WindowGroups({
                         linkDragPointRef.current = getDragPoint(event);
                         setLinkDragState({
                           groupKey,
-                          linkId: cardLink.id,
+                          instanceId,
                           orderedIds: effectiveLinkIds,
                         });
                       }
@@ -248,7 +263,7 @@ export function WindowGroups({
                     }
                     onDragEnd={(event) => {
                       event.stopPropagation();
-                      setDraggedWindowLinkId(null);
+                      setDraggedWindowLinkInstanceId(null);
                       onWindowTabDragEnd?.();
                       if (canReorderWindowLinks) {
                         const point = getDragPoint(event) ?? linkDragPointRef.current;
@@ -261,10 +276,10 @@ export function WindowGroups({
                           target &&
                           targetId &&
                           targetGroupKey === groupKey &&
-                          targetId !== linkDragState.linkId
+                          targetId !== linkDragState.instanceId
                             ? moveId(
                                 sourceIds,
-                                linkDragState.linkId,
+                                linkDragState.instanceId,
                                 targetId,
                                 getElementDragPlacement({
                                   currentTarget: target,
@@ -279,7 +294,7 @@ export function WindowGroups({
                             : null;
                         linkDragPointRef.current = null;
                         setLinkDragState(null);
-                        if (orderedIds) persistLinkOrder(groupKey, groupLinks, orderedIds);
+                        if (orderedIds) persistLinkOrder(groupKey, visibleLinks, orderedIds);
                       }
                     }}
                     onDragOver={canReorderWindowLinks ? handleDragOver : undefined}
@@ -309,7 +324,7 @@ export function WindowGroups({
                           url: cardLink.url,
                         })
                       }
-                      bindingPopoverId={`window:${window.id}:${tab.id}`}
+                      bindingPopoverId={`window:${instanceId}`}
                       activeBindingPopoverId={activeBindingPopoverId}
                       onOpenBindingPopover={onOpenBindingPopover}
                       onCloseBindingPopover={onCloseBindingPopover}
@@ -337,4 +352,8 @@ function tabToLinkRecord(tab: BrowserTab, linksById: Map<Id, LinkRecord>, collec
     url: persistedLink?.url ?? tab.url,
     note: persistedLink?.note,
   };
+}
+
+function getWindowLinkInstanceId(groupKey: string, tab: BrowserTab, link: LinkRecord, index: number) {
+  return `${groupKey}:link:${index}:${tab.id}:${link.id}`;
 }

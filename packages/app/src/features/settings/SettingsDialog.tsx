@@ -44,8 +44,6 @@ export function SettingsDialog({
   onWindowGroupLayoutChange,
   tagDisplayFormat,
   onTagDisplayFormatChange,
-  filterWindowLinks,
-  onFilterWindowLinksChange,
   showGroupOpenModeSetting,
   groupOpenMode,
   onGroupOpenModeChange,
@@ -94,8 +92,6 @@ export function SettingsDialog({
   onWindowGroupLayoutChange: (value: WindowGroupLayout) => void;
   tagDisplayFormat: TagDisplayFormat;
   onTagDisplayFormatChange: (value: TagDisplayFormat) => void;
-  filterWindowLinks: boolean;
-  onFilterWindowLinksChange: (enabled: boolean) => void;
   showGroupOpenModeSetting: boolean;
   groupOpenMode: GroupOpenMode;
   onGroupOpenModeChange: (value: GroupOpenMode) => void;
@@ -268,19 +264,6 @@ export function SettingsDialog({
               </SelectContent>
             </Select>
           </div>
-          <label
-            className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2"
-            data-ui-name="窗口链接参与过滤设置"
-          >
-            <span className="text-sm font-medium">窗口链接参与过滤</span>
-            <input
-              checked={filterWindowLinks}
-              className="h-4 w-4 accent-[hsl(var(--primary))]"
-              data-ui-name="窗口链接参与过滤开关"
-              type="checkbox"
-              onChange={(event) => onFilterWindowLinksChange(event.target.checked)}
-            />
-          </label>
           {showGroupOpenModeSetting ? (
             <label
               className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/30 px-3 py-2"

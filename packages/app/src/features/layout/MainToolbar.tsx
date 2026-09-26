@@ -44,8 +44,6 @@ export function MainToolbar({
   searchShortcut,
   settingsOpen,
   onSettingsOpenChange,
-  filterWindowLinks,
-  onFilterWindowLinksChange,
   showGroupOpenModeSetting,
   groupOpenMode,
   onGroupOpenModeChange,
@@ -106,8 +104,6 @@ export function MainToolbar({
   searchShortcut: string;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
-  filterWindowLinks: boolean;
-  onFilterWindowLinksChange: (enabled: boolean) => void;
   showGroupOpenModeSetting: boolean;
   groupOpenMode: GroupOpenMode;
   onGroupOpenModeChange: (value: GroupOpenMode) => void;

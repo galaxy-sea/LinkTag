@@ -183,6 +183,7 @@ export function SearchBox({
   };
 
   const onSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setOpen(true);

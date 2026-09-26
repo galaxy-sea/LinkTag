@@ -14,6 +14,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+function handleEscapeKeyDown(event: KeyboardEvent, onEscapeKeyDown?: (event: KeyboardEvent) => void) {
+  if (event.isComposing) {
+    event.preventDefault();
+    return;
+  }
+  onEscapeKeyDown?.(event);
+}
+
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "default" | "secondary" | "ghost" | "outline" | "danger";
   size?: "default" | "sm" | "icon";
@@ -143,7 +151,7 @@ export const DialogDescription = DialogPrimitive.Description;
 export const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { overlayClassName?: string }
->(({ className, overlayClassName, children, ...props }, ref) => (
+>(({ className, overlayClassName, children, onEscapeKeyDown, ...props }, ref) => (
   <DialogPrimitive.Portal>
     <DialogPrimitive.Overlay
       data-linktag-dialog-layer
@@ -160,6 +168,7 @@ export const DialogContent = React.forwardRef<
         className,
       )}
       {...props}
+      onEscapeKeyDown={(event) => handleEscapeKeyDown(event, onEscapeKeyDown)}
     >
       {children}
     </DialogPrimitive.Content>
@@ -176,7 +185,7 @@ export const AlertDialogDescription = AlertDialogPrimitive.Description;
 export const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onEscapeKeyDown, ...props }, ref) => (
   <AlertDialogPrimitive.Portal>
     <AlertDialogPrimitive.Overlay data-linktag-dialog-layer className="fixed inset-0 z-50 bg-black/35" />
     <AlertDialogPrimitive.Content
@@ -187,6 +196,7 @@ export const AlertDialogContent = React.forwardRef<
         className,
       )}
       {...props}
+      onEscapeKeyDown={(event) => handleEscapeKeyDown(event, onEscapeKeyDown)}
     >
       {children}
     </AlertDialogPrimitive.Content>
@@ -201,7 +211,7 @@ export const PopoverClose = PopoverPrimitive.Close;
 export const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
->(({ className, align = "start", sideOffset = 8, ...props }, ref) => (
+>(({ className, align = "start", sideOffset = 8, onEscapeKeyDown, ...props }, ref) => (
   <PopoverPrimitive.Portal>
     <PopoverPrimitive.Content
       ref={ref}
@@ -212,6 +222,7 @@ export const PopoverContent = React.forwardRef<
         className,
       )}
       {...props}
+      onEscapeKeyDown={(event) => handleEscapeKeyDown(event, onEscapeKeyDown)}
     />
   </PopoverPrimitive.Portal>
 ));
@@ -222,7 +233,7 @@ export const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
 export const ContextMenuContent = React.forwardRef<
   React.ElementRef<typeof ContextMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Content>
->(({ className, ...props }, ref) => (
+>(({ className, onEscapeKeyDown, ...props }, ref) => (
   <ContextMenuPrimitive.Portal>
     <ContextMenuPrimitive.Content
       ref={ref}
@@ -232,6 +243,7 @@ export const ContextMenuContent = React.forwardRef<
         className,
       )}
       {...props}
+      onEscapeKeyDown={(event) => handleEscapeKeyDown(event, onEscapeKeyDown)}
     />
   </ContextMenuPrimitive.Portal>
 ));
@@ -276,12 +288,13 @@ export const SelectValue = SelectPrimitive.Value;
 export const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, onEscapeKeyDown, ...props }, ref) => (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
       className={cn("z-50 overflow-hidden rounded-md border border-border bg-popover shadow-lg", className)}
       {...props}
+      onEscapeKeyDown={(event) => handleEscapeKeyDown(event, onEscapeKeyDown)}
     >
       <SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport>
     </SelectPrimitive.Content>

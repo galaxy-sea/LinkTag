@@ -79,7 +79,6 @@ export function App({
     windowGroupLayout,
     tagGroupSort,
     tagDisplayFormat,
-    filterWindowLinks,
     groupOpenMode,
     elkLayout,
     edgeLineType,
@@ -98,7 +97,6 @@ export function App({
     saveWindowGroupLayout,
     saveTagGroupSort,
     saveTagDisplayFormat,
-    saveFilterWindowLinks,
     saveGroupOpenMode,
     saveElkLayout,
     saveEdgeLineType,
@@ -361,8 +359,6 @@ export function App({
           searchShortcut={searchShortcut}
           settingsOpen={settingsOpen}
           onSettingsOpenChange={setSettingsOpen}
-          filterWindowLinks={filterWindowLinks}
-          onFilterWindowLinksChange={saveFilterWindowLinks}
           showGroupOpenModeSetting={Boolean(onOpenLinks)}
           groupOpenMode={groupOpenMode}
           onGroupOpenModeChange={saveGroupOpenMode}
@@ -434,8 +430,6 @@ export function App({
                 onWindowGroupLayoutChange={saveWindowGroupLayout}
                 tagDisplayFormat={tagDisplayFormat}
                 onTagDisplayFormatChange={saveTagDisplayFormat}
-                filterWindowLinks={filterWindowLinks}
-                onFilterWindowLinksChange={saveFilterWindowLinks}
                 showGroupOpenModeSetting={Boolean(onOpenLinks)}
                 groupOpenMode={groupOpenMode}
                 onGroupOpenModeChange={saveGroupOpenMode}
@@ -503,7 +497,6 @@ export function App({
               onToggleTagGroup={toggleTagGroup}
               badgeFilters={badgeFilters}
               onBadgeFilterChange={toggleBadgeFilter}
-              filterWindowLinks={filterWindowLinks}
               onOpenLinks={
                 onOpenLinks ? (groupLinks, title) => void onOpenLinks(groupLinks, title, groupOpenMode) : undefined
               }
@@ -515,6 +508,7 @@ export function App({
               onBindTag={bindTagToLink}
               onDeleteBinding={requestDeleteBinding}
               onEditTag={requestEditTag}
+              onDeleteTag={requestDeleteTag}
               onDeleteRelation={deleteGraphRelation}
               onPersistRuntimeTabLink={persistRuntimeTabLink}
               onUpdateLink={updateLink}

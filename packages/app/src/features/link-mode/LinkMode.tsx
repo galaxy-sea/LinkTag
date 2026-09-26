@@ -77,7 +77,6 @@ export function LinkMode({
   onToggleTagGroup,
   badgeFilters,
   onBadgeFilterChange,
-  filterWindowLinks,
   toolbarWindowGroupsOpen,
   onWindowGroupsPanelEnter,
   onWindowGroupsPanelLeave,
@@ -86,6 +85,7 @@ export function LinkMode({
   onBindTag,
   onDeleteBinding,
   onEditTag,
+  onDeleteTag,
   onDeleteRelation,
   onPersistRuntimeTabLink,
   onUpdateLink,
@@ -111,7 +111,6 @@ export function LinkMode({
   onToggleTagGroup: (tagId: Id) => void;
   badgeFilters: BadgeFilter[];
   onBadgeFilterChange: (filter: BadgeFilter, additive?: boolean) => void;
-  filterWindowLinks: boolean;
   toolbarWindowGroupsOpen: boolean;
   onWindowGroupsPanelEnter: () => void;
   onWindowGroupsPanelLeave: () => void;
@@ -120,6 +119,7 @@ export function LinkMode({
   onBindTag: (linkId: Id, tagId: Id) => Promise<void>;
   onDeleteBinding: (linkId: Id, tagId: Id) => void;
   onEditTag: (tag: TagRecord) => void;
+  onDeleteTag: (tagId: Id) => void;
   onDeleteRelation: (relationId: Id) => void;
   onPersistRuntimeTabLink: (tab: BrowserTab) => Promise<void>;
   onUpdateLink: (linkId: Id, values: LinkEditValues) => Promise<void>;
@@ -195,16 +195,6 @@ export function LinkMode({
   const hasWindowGroups = windows.some((window) => window.tabs.length > 0);
   const canDragTagGroups = searchIsEmpty(searchQuery) && badgeFilters.length === 0;
 
-  const linkHasAnySelectedTag = useCallback(
-    (linkId: Id) => {
-      if (selectedTagIdList.length === 0) return true;
-      const tagIds = linkTagIdsByLinkId.get(linkId);
-      if (!tagIds) return false;
-      return selectedTagIdList.some((tagId) => tagIds.has(tagId));
-    },
-    [linkTagIdsByLinkId, selectedTagIdList],
-  );
-
   const openBindingPopover = useCallback((id: string) => {
     setActiveBindingPopoverId(id);
   }, []);
@@ -217,8 +207,8 @@ export function LinkMode({
       windows={windows}
       collectionId={collectionId}
       searchQuery={searchQuery}
-      filterQuery={filterWindowLinks}
-      linkMatchesBadgeFilter={(linkId) => !filterWindowLinks || linkHasAnySelectedTag(linkId)}
+      filterQuery={false}
+      linkMatchesBadgeFilter={() => true}
       linkView={linkView}
       collapsed={collapsedWindowGroups}
       onToggle={onToggleWindowGroup}
@@ -265,7 +255,19 @@ export function LinkMode({
       relatedTagIds.add(relation.targetTagId);
     });
 
-    return tags.filter((tag) => relatedTagIds.has(tag.id)).sort(compare);
+    const selectedOrder = new Map(orderedSelectedTagIds.map((tagId, index) => [tagId, index]));
+    return tags
+      .filter((tag) => relatedTagIds.has(tag.id))
+      .sort((left, right) => {
+        const leftSelectedIndex = selectedOrder.get(left.id);
+        const rightSelectedIndex = selectedOrder.get(right.id);
+        if (leftSelectedIndex !== undefined || rightSelectedIndex !== undefined) {
+          if (leftSelectedIndex === undefined) return 1;
+          if (rightSelectedIndex === undefined) return -1;
+          return leftSelectedIndex - rightSelectedIndex;
+        }
+        return compare(left, right);
+      });
   }, [activeRelations, badgeFilters, relationsByTagId, tagGroupSort, tags]);
 
   const tagGroupIds = useMemo(() => tagsForGroups.map((tag) => tag.id), [tagsForGroups]);
@@ -370,6 +372,7 @@ export function LinkMode({
           totalLinkCount={tagLinkCountsByTagId.get(tag.id) ?? 0}
           onBadgeFilterChange={onBadgeFilterChange}
           onEditTag={onEditTag}
+          onDeleteTag={onDeleteTag}
           onDeleteRelation={onDeleteRelation}
           onToggle={() => onToggleTagGroup(tag.id)}
           onCreateTag={onCreateTag}
@@ -504,6 +507,7 @@ function TagLinkGroup({
   totalLinkCount,
   onBadgeFilterChange,
   onEditTag,
+  onDeleteTag,
   onDeleteRelation,
   onToggle,
   onCreateTag,
@@ -543,6 +547,7 @@ function TagLinkGroup({
   totalLinkCount: number | null;
   onBadgeFilterChange: (filter: BadgeFilter, additive?: boolean) => void;
   onEditTag: (tag: TagRecord) => void;
+  onDeleteTag: (tagId: Id) => void;
   onDeleteRelation: (relationId: Id) => void;
   onToggle: () => void;
   onCreateTag: (name: string, color: string) => Promise<TagRecord | null>;
@@ -579,10 +584,15 @@ function TagLinkGroup({
   );
   const [visibleCount, setVisibleCount] = useState(groupRenderStep);
   const [previewWindowLinks, setPreviewWindowLinks] = useState<LinkRecord[] | null>(null);
+  const [hoveredRelatedTagId, setHoveredRelatedTagId] = useState<Id | null>(null);
 
   useEffect(() => {
     setVisibleCount(groupRenderStep);
   }, [tag.id, searchQuery, selectedTagIdList, activeRelationIds]);
+
+  useEffect(() => {
+    setHoveredRelatedTagId(null);
+  }, [tag.id]);
 
   useEffect(() => {
     if (!draggedWindowTabPayload || windowDropPreviewTagId !== tag.id) setPreviewWindowLinks(null);
@@ -702,6 +712,7 @@ function TagLinkGroup({
             active={selectedTagIds.has(tag.id)}
             onClick={() => onBadgeFilterChange({ type: "tag", tagId: tag.id })}
             onEdit={onEditTag}
+            onDelete={onDeleteTag}
           />
         }
         collapsed={isCollapsed}
@@ -723,10 +734,12 @@ function TagLinkGroup({
                 format={tagDisplayFormat}
                 activeTag={selectedTagIds.has(item.tag.id)}
                 activeRelation={activeRelationIds.has(item.relation.id)}
+                muted={Boolean(hoveredRelatedTagId && hoveredRelatedTagId !== item.tag.id)}
                 onTagClick={(tagId) => onBadgeFilterChange({ type: "tag", tagId })}
                 onRelationClick={(relationId) => onBadgeFilterChange({ type: "relation", relationId })}
                 onTagEdit={onEditTag}
                 onRelationDelete={onDeleteRelation}
+                onHoverChange={(hovered) => setHoveredRelatedTagId(hovered ? item.tag.id : null)}
               />
             ))}
           </div>
@@ -751,6 +764,7 @@ function TagLinkGroup({
             bindingPrefix={`tag:${tag.id}`}
             priorityTagId={tag.id}
             unbindTagId={tag.id}
+            mutedExceptTagId={hoveredRelatedTagId}
           />
         )}
         {hasMore ? (
@@ -976,6 +990,7 @@ function LinkGroupCards({
   bindingPrefix,
   priorityTagId,
   unbindTagId,
+  mutedExceptTagId,
 }: {
   links: LinkRecord[];
   linkView: LinkView;
@@ -992,6 +1007,7 @@ function LinkGroupCards({
   bindingPrefix: string;
   priorityTagId?: Id;
   unbindTagId?: Id;
+  mutedExceptTagId?: Id | null;
 }) {
   const [draggedLinkId, setDraggedLinkId] = useState<Id | null>(null);
   const [previewLinkIds, setPreviewLinkIds] = useState<Id[] | null>(null);
@@ -1051,72 +1067,82 @@ function LinkGroupCards({
 
   return (
     <div className={linkGroupLayoutClassName(linkView)}>
-      {visibleLinks.map((link) => (
-        <div
-          key={link.id}
-          className={cn("min-w-0 cursor-grab", draggedLinkId === link.id && "opacity-50")}
-          data-linktag-link-sort-id={link.id}
-          draggable
-          onDragStart={(event) => {
-            event.stopPropagation();
-            linkDragPointRef.current = getDragPoint(event);
-            setDraggedLinkId(link.id);
-            setPreviewLinkIds(effectiveLinkIds);
-            setElementDragImage(event);
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", link.id);
-          }}
-          onDrag={(event) => {
-            event.stopPropagation();
-            linkDragPointRef.current = getDragPoint(event) ?? linkDragPointRef.current;
-          }}
-          onDragEnd={(event) => {
-            event.stopPropagation();
-            const orderedIds = resolveLinkDropOrder(event);
-            linkDragPointRef.current = null;
-            setDraggedLinkId(null);
-            setPreviewLinkIds(null);
-            if (!draggedLinkId || !orderedIds || sameIds(orderedIds, effectiveLinkIds)) return;
-            persistLinkOrder(orderedIds);
-          }}
-          onDragOver={(event) => {
-            linkDragPointRef.current = getDragPoint(event);
-            if (!draggedLinkId || draggedLinkId === link.id) return;
-            event.stopPropagation();
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "move";
-            const placement = getElementDragPlacement(event);
-            setPreviewLinkIds((current) => {
-              const sourceIds = current ?? effectiveLinkIds;
-              const orderedIds = moveId(sourceIds, draggedLinkId, link.id, placement);
-              return orderedIds.every((id, index) => id === sourceIds[index]) ? current : orderedIds;
-            });
-          }}
-          onDrop={(event) => {
-            if (hasWindowTabDragPayload(event.dataTransfer)) return;
-            event.stopPropagation();
-            event.preventDefault();
-          }}
-        >
-          <LinkCard
-            view={linkView}
-            link={link}
-            tags={tagsByLinkId.get(link.id) ?? []}
-            allTags={allTags}
-            onCreateTag={onCreateTag}
-            onBindTag={onBindTag}
-            onDeleteBinding={onDeleteBinding}
-            onUpdateLink={onUpdateLink}
-            bindingPopoverId={`${bindingPrefix}:${link.id}`}
-            activeBindingPopoverId={activeBindingPopoverId}
-            onOpenBindingPopover={onOpenBindingPopover}
-            onCloseBindingPopover={onCloseBindingPopover}
-            priorityTagId={priorityTagId}
-            unbindTagId={unbindTagId}
-            fluid
-          />
-        </div>
-      ))}
+      {visibleLinks.map((link) => {
+        const linkTags = tagsByLinkId.get(link.id) ?? [];
+        const mutedByRelatedTag = Boolean(
+          mutedExceptTagId && !linkTags.some((linkTag) => linkTag.id === mutedExceptTagId),
+        );
+        return (
+          <div
+            key={link.id}
+            className={cn(
+              "min-w-0 cursor-grab transition-[filter,opacity]",
+              draggedLinkId === link.id && "opacity-50",
+              mutedByRelatedTag && "opacity-40 grayscale",
+            )}
+            data-linktag-link-sort-id={link.id}
+            draggable
+            onDragStart={(event) => {
+              event.stopPropagation();
+              linkDragPointRef.current = getDragPoint(event);
+              setDraggedLinkId(link.id);
+              setPreviewLinkIds(effectiveLinkIds);
+              setElementDragImage(event);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", link.id);
+            }}
+            onDrag={(event) => {
+              event.stopPropagation();
+              linkDragPointRef.current = getDragPoint(event) ?? linkDragPointRef.current;
+            }}
+            onDragEnd={(event) => {
+              event.stopPropagation();
+              const orderedIds = resolveLinkDropOrder(event);
+              linkDragPointRef.current = null;
+              setDraggedLinkId(null);
+              setPreviewLinkIds(null);
+              if (!draggedLinkId || !orderedIds || sameIds(orderedIds, effectiveLinkIds)) return;
+              persistLinkOrder(orderedIds);
+            }}
+            onDragOver={(event) => {
+              linkDragPointRef.current = getDragPoint(event);
+              if (!draggedLinkId || draggedLinkId === link.id) return;
+              event.stopPropagation();
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              const placement = getElementDragPlacement(event);
+              setPreviewLinkIds((current) => {
+                const sourceIds = current ?? effectiveLinkIds;
+                const orderedIds = moveId(sourceIds, draggedLinkId, link.id, placement);
+                return orderedIds.every((id, index) => id === sourceIds[index]) ? current : orderedIds;
+              });
+            }}
+            onDrop={(event) => {
+              if (hasWindowTabDragPayload(event.dataTransfer)) return;
+              event.stopPropagation();
+              event.preventDefault();
+            }}
+          >
+            <LinkCard
+              view={linkView}
+              link={link}
+              tags={linkTags}
+              allTags={allTags}
+              onCreateTag={onCreateTag}
+              onBindTag={onBindTag}
+              onDeleteBinding={onDeleteBinding}
+              onUpdateLink={onUpdateLink}
+              bindingPopoverId={`${bindingPrefix}:${link.id}`}
+              activeBindingPopoverId={activeBindingPopoverId}
+              onOpenBindingPopover={onOpenBindingPopover}
+              onCloseBindingPopover={onCloseBindingPopover}
+              priorityTagId={priorityTagId}
+              unbindTagId={unbindTagId}
+              fluid
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

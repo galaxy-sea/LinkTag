@@ -79,11 +79,11 @@ export function RelationEdge({
             反转方向
           </ContextMenuItem>
           <ContextMenuItem
-            data-ui-name="关系线删除"
+            data-ui-name="关系线解除关系"
             className="text-destructive"
             onSelect={() => data.onDeleteRelation(data.relation.id)}
           >
-            删除
+            解除关系
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>

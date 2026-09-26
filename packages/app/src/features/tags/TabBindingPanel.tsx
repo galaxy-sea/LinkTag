@@ -158,7 +158,7 @@ function BindTagForm({
         value={name}
         onChange={(event: ChangeEvent<HTMLInputElement>) => setName(event.target.value)}
         onKeyDown={(event: ReactKeyboardEvent<HTMLInputElement>) => {
-          if (event.key === "Escape") {
+          if (event.key === "Escape" && (event.nativeEvent.isComposing || composingRef.current)) {
             event.stopPropagation();
             return;
           }
@@ -180,7 +180,10 @@ function BindTagForm({
         autoFocus
         placeholder="搜索或增加标签"
       />
-      <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto pr-1" data-ui-name="可绑定标签列表">
+      <div
+        className="flex max-h-[min(42dvh,22rem)] flex-wrap gap-1.5 overflow-y-auto pr-1"
+        data-ui-name="可绑定标签列表"
+      >
         {matches.map((tag) => (
           <span
             key={tag.id}
