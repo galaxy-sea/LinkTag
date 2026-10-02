@@ -193,6 +193,7 @@ export function LinkMode({
   );
   const activeRelationIds = useMemo(() => new Set(activeRelations.map((relation) => relation.id)), [activeRelations]);
   const hasWindowGroups = windows.some((window) => window.tabs.length > 0);
+  const hasBrowserWindows = windows.length > 0;
   const canDragTagGroups = searchIsEmpty(searchQuery) && badgeFilters.length === 0;
 
   const openBindingPopover = useCallback((id: string) => {
@@ -228,7 +229,7 @@ export function LinkMode({
       onCloseBindingPopover={closeBindingPopover}
       side={side}
       edgeToEdge={edgeToEdge}
-      showEmptyGroups={side}
+      showEmptyGroups={false}
       onWindowTabDragStart={setDraggedWindowTabPayload}
       onWindowTabDragEnd={() => {
         setDraggedWindowTabPayload(null);
@@ -431,8 +432,8 @@ export function LinkMode({
 
   const topHoverOpen = hasWindowGroups && windowGroupLayout === "top-hover" && toolbarWindowGroupsOpen;
   const showTopInline = hasWindowGroups && windowGroupLayout === "top";
-  const showRightInline = hasWindowGroups && windowGroupLayout === "right";
-  const showRightHover = hasWindowGroups && windowGroupLayout === "right-hover";
+  const showRightInline = hasBrowserWindows && windowGroupLayout === "right";
+  const showRightHover = hasBrowserWindows && windowGroupLayout === "right-hover";
 
   return (
     <div className="relative h-full overflow-hidden" data-ui-name="链接模式页面">
